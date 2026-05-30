@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 11% 4%;
+    --foreground: 240 5% 96%;
+    --card: 240 18% 8%;
+    --card-foreground: 240 5% 96%;
+    --popover: 240 18% 8%;
+    --popover-foreground: 240 5% 96%;
+    --primary: 48 100% 50%;
+    --primary-foreground: 240 11% 4%;
+    --secondary: 230 70% 22%;
+    --secondary-foreground: 240 5% 96%;
+    --muted: 240 18% 8%;
+    --muted-foreground: 220 6% 57%;
+    --accent: 173 65% 47%;
+    --accent-foreground: 240 11% 4%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 100% / 0.06;
+    --input: 0 0% 100% / 0.12;
+    --ring: 48 100% 50%;
+    --radius: 0.5rem;
+  }
+
+  body {
+    @apply bg-[#08080A] text-[#8A8F98] antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .text-chrome {
+    color: #F4F4F5;
+  }
+  .text-steel {
+    color: #8A8F98;
+  }
+  .text-amber-brand {
+    color: #FFD600;
+  }
+  .bg-obsidian {
+    background-color: #08080A;
+  }
+  .bg-ink {
+    background-color: #111118;
+  }
+  .border-hairline {
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+  .border-card {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  .glass-panel {
+    background: rgba(17, 17, 24, 0.6);
+    backdrop-filter: blur(12px);
+  }
+  .font-display {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 400;
+    letter-spacing: -0.04em;
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes pulse-line {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes scroll-down {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+.animate-pulse-line {
+  animation: pulse-line 2s ease-in-out infinite;
+}
