@@ -21,6 +21,7 @@ import {
   Send,
   Store,
   PackageCheck,
+  Truck,
 } from 'lucide-react';
 import { trpc } from '@/providers/trpc';
 
