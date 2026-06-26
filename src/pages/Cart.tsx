@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   ShoppingBag,
   CreditCard,
+  Check,
 } from 'lucide-react';
 
 export default function Cart() {
@@ -74,6 +75,12 @@ export default function Cart() {
                     <p className="text-lg font-medium text-amber mt-2">
                       ${item.price.toFixed(2)}
                     </p>
+                    {item.returnCore && (
+                      <div className="flex items-center gap-1.5 mt-1.5 bg-teal/10 border border-teal/20 rounded-full px-2.5 py-1 w-fit">
+                        <Check size={12} className="text-teal" />
+                        <span className="text-[11px] text-teal font-medium">Core return (-${item.coreRebate})</span>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between mt-3">
                       <div className="flex items-center bg-obsidian border border-white/[0.12] rounded-lg">
