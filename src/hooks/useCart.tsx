@@ -8,6 +8,8 @@ export interface CartItem {
   image: string;
   quantity: number;
   stock: number;
+  returnCore?: boolean;
+  coreRebate?: string;
 }
 
 interface CartContextType {
