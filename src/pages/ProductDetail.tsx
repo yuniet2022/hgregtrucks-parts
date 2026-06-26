@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router';
 import { useParts } from '../hooks/useParts';
 import { useCart } from '../hooks/useCart';
+import { useVariants } from '../hooks/useVariants';
 import HGregLogo from '../components/HGregLogo';
 import { useState, useEffect } from 'react';
 import {
@@ -26,6 +27,17 @@ export default function ProductDetail() {
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [mainImage, setMainImage] = useState('');
+  const [returnCore, setReturnCore] = useState(false);
+  const [selectedVariant, setSelectedVariant] = useState<number | null>(null);
+
+  const { variants: productVariants } = useVariants(product?.id);
+  const hasVariants = productVariants.length > 0;
+  const activeVariant = hasVariants && selectedVariant !== null
+    ? productVariants.find(v => v.id === selectedVariant)
+    : null;
+  const displayPrice = activeVariant ? activeVariant.price : product?.price;
+  const displayStock = activeVariant ? activeVariant.stock : (product?.stock || 0);
+  const displaySku = activeVariant ? activeVariant.sku : product?.sku;
 
   const product = parts.find((p) => p.id === Number(id));
 
@@ -75,17 +87,30 @@ export default function ProductDetail() {
 
   const inCart = cartItems.find((i) => i.id === product.id);
   const cartQty = inCart?.quantity || 0;
-  const maxQty = product.stock - cartQty;
+  const maxQty = displayStock - cartQty;
 
   const handleAddToCart = () => {
     if (quantity > maxQty) return;
+    const basePrice = parseFloat(displayPrice || product.price);
+    const hasCore = parseFloat(product.coreCharge || '0') > 0;
+    const hasRebate = parseFloat(product.coreRebate || '0') > 0;
+    const finalPrice = hasCore && !returnCore
+      ? basePrice + parseFloat(product.coreCharge || '0')
+      : hasRebate && returnCore
+      ? basePrice - parseFloat(product.coreRebate || '0')
+      : basePrice;
+    const itemName = activeVariant
+      ? `${product.name} — ${activeVariant.variantName}`
+      : product.name;
     addItem({
       id: product.id,
-      name: product.name,
-      sku: product.sku,
-      price: parseFloat(product.price),
+      name: itemName,
+      sku: displaySku || product.sku,
+      price: finalPrice,
       image: product.image,
-      stock: product.stock,
+      stock: displayStock,
+      returnCore,
+      coreRebate: product.coreRebate,
     });
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
@@ -183,8 +208,29 @@ export default function ProductDetail() {
               <span className="text-xs tracking-[0.1em] uppercase text-amber bg-amber/10 px-3 py-1 rounded">
                 {product.category}
               </span>
-              <span className="text-xs text-steel">SKU: {product.sku}</span>
+              <span className="text-xs text-steel">SKU: {displaySku}</span>
             </div>
+
+            {/* Variant Selector */}
+            {hasVariants && (
+              <div className="mb-4">
+                <label className="block text-xs text-steel uppercase tracking-wider mb-2">
+                  Select {(product as any).variantLabel || 'Size'}
+                </label>
+                <select
+                  value={selectedVariant ?? ''}
+                  onChange={(e) => setSelectedVariant(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full bg-ink border border-white/[0.12] rounded-lg px-4 py-3 text-sm text-chrome appearance-none cursor-pointer focus:border-amber focus:outline-none"
+                >
+                  <option value="">Choose {(product as any).variantLabel || 'Size'}...</option>
+                  {productVariants.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.variantName} — ${v.price} ({v.stock} in stock)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <h1 className="text-3xl md:text-4xl font-light text-chrome leading-tight mb-4">
               {product.name}
@@ -199,9 +245,60 @@ export default function ProductDetail() {
               <span className="text-sm text-steel">(47 reviews)</span>
             </div>
 
-            <p className="text-4xl font-light text-amber tracking-tight mb-6">
-              ${product.price}
-            </p>
+            {/* Price with Core Charge */}
+            {(() => {
+              const hasCore = parseFloat(product.coreCharge || '0') > 0;
+              const hasRebate = parseFloat(product.coreRebate || '0') > 0;
+              const basePrice = parseFloat(displayPrice || product.price);
+              const finalPrice = hasCore && !returnCore
+                ? basePrice + parseFloat(product.coreCharge || '0')
+                : hasRebate && returnCore
+                ? basePrice - parseFloat(product.coreRebate || '0')
+                : basePrice;
+              const savings = hasRebate && returnCore ? parseFloat(product.coreRebate || '0') : 0;
+
+              return (
+                <div className="mb-6">
+                  <p className="text-4xl font-light text-amber tracking-tight">
+                    ${finalPrice.toFixed(2)}
+                  </p>
+                  {hasCore && (
+                    <div className="mt-3">
+                      <div className="bg-ink rounded-xl border border-white/[0.08] p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <p className="text-sm font-medium text-chrome">Core Charge</p>
+                            <p className="text-xs text-steel">Return your old part for a discount</p>
+                          </div>
+                          <div className="text-right">
+                            {returnCore ? (
+                              <p className="text-sm text-teal font-medium">-${product.coreRebate} rebate</p>
+                            ) : (
+                              <p className="text-sm text-warning font-medium">+${product.coreCharge} charge</p>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setReturnCore(!returnCore)}
+                          className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                            returnCore
+                              ? 'bg-teal/20 text-teal border border-teal/30'
+                              : 'bg-white/[0.05] text-steel border border-white/[0.12] hover:border-white/20'
+                          }`}
+                        >
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                            returnCore ? 'bg-teal border-teal' : 'border-steel'
+                          }`}>
+                            {returnCore && <Check size={12} className="text-obsidian" />}
+                          </span>
+                          {returnCore ? 'I will return my old core (-$' + product.coreRebate + ')' : 'I will return my old core (save $' + (product.coreRebate || product.coreCharge) + ')'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Fulfillment Options - Pickup / Deliver / Ship */}
             {(product.pickup || product.deliver || product.ship) && (
@@ -211,10 +308,10 @@ export default function ProductDetail() {
                     <Store size={22} className="text-amber mx-auto mb-2" />
                     <p className="text-xs font-semibold uppercase tracking-wider text-chrome mb-1">Pickup</p>
                     <p className="text-xs text-teal font-medium">
-                      {product.stock > 0 ? 'In Stock' : 'Unavailable'}
+                      {displayStock > 0 ? 'In Stock' : 'Unavailable'}
                     </p>
                     <p className="text-[11px] text-steel mt-1">
-                      {product.stock > 0 ? 'Ready in 1hr' : 'Out of stock'}
+                      {displayStock > 0 ? 'Ready in 1hr' : 'Out of stock'}
                     </p>
                   </div>
                 )}
@@ -265,8 +362,8 @@ export default function ProductDetail() {
                 </div>
                 <div>
                   <span className="text-steel">Stock:</span>
-                  <span className={`ml-2 ${product.stock > 10 ? 'text-teal' : product.stock > 5 ? 'text-amber' : 'text-warning'}`}>
-                    {product.stock} available
+                  <span className={`ml-2 ${displayStock > 10 ? 'text-teal' : displayStock > 5 ? 'text-amber' : 'text-warning'}`}>
+                    {displayStock} available
                   </span>
                 </div>
                 <div>
