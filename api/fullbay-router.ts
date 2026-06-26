@@ -24,8 +24,14 @@ export const fullbayRouter = createRouter({
     .input(z.object({ daysBack: z.number().min(1).max(365).optional() }).optional())
     .mutation(async ({ input }) => {
       const db = getDb();
-      const days = input?.daysBack ?? 30;
-      const adjustments = await getInventoryAdjustments(days);
+      const days = input?.daysBack ?? 365;
+
+      let adjustments;
+      try {
+        adjustments = await getInventoryAdjustments(days);
+      } catch (e: any) {
+        return { created: 0, updated: 0, skipped: 0, errors: 1, total: 0, error: e.message };
+      }
 
       let created = 0;
       let updated = 0;
@@ -74,6 +80,6 @@ export const fullbayRouter = createRouter({
         }
       }
 
-      return { created, updated, skipped, errors: errors.length, total: adjustments.length };
+      return { created, updated, skipped, errors: errors.length, total: adjustments.length, error: errors.length > 0 ? errors[0] : null };
     }),
 });
