@@ -3,15 +3,16 @@ import { eq, like } from "drizzle-orm";
 import { createRouter, publicQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { parts } from "@db/schema";
-import { getInventoryAdjustments, pingFullbay } from "./fullbay-service";
+import { getInventoryAdjustments, pingFullbay, getDetectedIp } from "./fullbay-service";
 
 export const fullbayRouter = createRouter({
-  myIp: publicQuery.query(async ({ ctx }) => {
-    // Return the server's public IP so user can set FULLBAY_IP env var
-    const ip = ctx.req.headers.get("x-forwarded-for") ||
-               ctx.req.headers.get("x-real-ip") ||
-               "unknown";
-    return { ip };
+  myIp: publicQuery.query(async () => {
+    try {
+      const ip = await getDetectedIp();
+      return { ip, auto: true };
+    } catch (e: any) {
+      return { ip: "unknown", auto: false, error: e.message };
+    }
   }),
 
   ping: adminQuery.query(async () => {
@@ -37,24 +38,20 @@ export const fullbayRouter = createRouter({
 
       for (const adj of adjustments) {
         try {
-          // Skip if missing essential data
           if (!adj.PartNumber || !adj.PartName) { skipped++; continue; }
 
-          // Check if part already exists by SKU
           const existing = await db
             .select()
             .from(parts)
             .where(eq(parts.sku, adj.PartNumber));
 
           if (existing.length > 0) {
-            // Update stock only
             await db
               .update(parts)
               .set({ stock: adj.NewOnHand })
               .where(eq(parts.id, existing[0].id));
             updated++;
           } else {
-            // Create new part from Fullbay data
             await db.insert(parts).values({
               name: adj.PartName,
               sku: adj.PartNumber,
@@ -65,8 +62,8 @@ export const fullbayRouter = createRouter({
               model: "All",
               yearFrom: 1990,
               yearTo: 2026,
-              description: `Imported from Fullbay. Reason: ${adj.Reason || "N/A"}`,
-              image: "/no-photo.png", // Placeholder - admin must upload real image
+              description: `Imported from Fullbay.`,
+              image: "/no-photo.png",
               oemNumber: adj.PartNumber,
               brand: "",
               pickup: 1,
