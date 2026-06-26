@@ -6,8 +6,7 @@
  *   token = sha1(key + todaysDate + ipAddress)
  *
  * Env vars:
- *   FULLBAY_API_KEY  - Your Fullbay API key (e.g. 88816fee-5d15-e4ee-ab41-a3020a6c742c)
- *   FULLBAY_IP       - Public IP of your Railway server (get from Railway dashboard)
+ *   FULLBAY_API_KEY  - Your Fullbay API key
  */
 
 import { createHash } from "crypto";
@@ -18,32 +17,44 @@ const API_KEY = () => {
   return key;
 };
 
-const SERVER_IP = () => {
-  const ip = process.env.FULLBAY_IP;
-  if (!ip) throw new Error("FULLBAY_IP not set. Get your Railway server public IP from the Railway dashboard.");
-  return ip;
-};
+// Cache the server IP
+let cachedServerIp: string | null = null;
 
-function generateToken(): string {
+/** Get the server's public IP automatically */
+async function getServerIp(): Promise<string> {
+  if (cachedServerIp) return cachedServerIp;
+  try {
+    const res = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(5000) });
+    const data = await res.json();
+    cachedServerIp = data.ip;
+    return data.ip;
+  } catch {
+    try {
+      const res = await fetch("https://ipinfo.io/json", { signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
+      cachedServerIp = data.ip;
+      return data.ip;
+    } catch {
+      throw new Error("Cannot determine server public IP.");
+    }
+  }
+}
+
+function generateToken(ip: string): string {
   const key = API_KEY();
-  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-  const ip = SERVER_IP();
+  const today = new Date().toISOString().split("T")[0];
   const hashInput = `${key}${today}${ip}`;
   return createHash("sha1").update(hashInput).digest("hex");
 }
 
 async function fb(endpoint: string, params: Record<string, string> = {}): Promise<any> {
+  const ip = await getServerIp();
   const url = new URL(`https://app.fullbay.com/services/${endpoint}`);
-
-  // Add auth params
   url.searchParams.set("key", API_KEY());
-  url.searchParams.set("token", generateToken());
-
-  // Add all other params
+  url.searchParams.set("token", generateToken(ip));
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v);
   }
-
   const res = await fetch(url.toString(), { method: "GET" });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
   const json = await res.json();
@@ -61,7 +72,6 @@ export interface FbAdjustment {
   Location: string;
 }
 
-/** Read inventory adjustments from Fullbay (last 7 days max per API limit) */
 export async function getInventoryAdjustments(daysBack = 7): Promise<FbAdjustment[]> {
   const end = new Date().toISOString().split("T")[0];
   const start = new Date(Date.now() - daysBack * 86400000).toISOString().split("T")[0];
@@ -69,10 +79,13 @@ export async function getInventoryAdjustments(daysBack = 7): Promise<FbAdjustmen
   return (json.Data ?? []) as FbAdjustment[];
 }
 
-/** Quick connectivity check */
 export async function pingFullbay(): Promise<boolean> {
   try {
     await fb("getAdjustments.php", { startDate: "2024-01-01", endDate: "2024-01-02" });
     return true;
   } catch { return false; }
+}
+
+export async function getDetectedIp(): Promise<string> {
+  return getServerIp();
 }
