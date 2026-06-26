@@ -15,13 +15,9 @@ export const fullbayRouter = createRouter({
     }
   }),
 
-  ping: adminQuery.query(async () => {
-    try {
-      const ok = await pingFullbay();
-      return { connected: ok };
-    } catch (e: any) {
-      return { connected: false, error: e.message };
-    }
+    ping: adminQuery.query(async () => {
+    const result = await pingFullbay();
+    return { connected: result.ok, error: result.error || null };
   }),
 
   syncInventory: adminQuery
