@@ -380,19 +380,19 @@ function FullbaySyncPanel() {
         <div className="flex items-center gap-3 mb-4">
           <div className={`w-3 h-3 rounded-full ${pingQuery.data?.connected ? 'bg-teal' : 'bg-warning'} animate-pulse`} />
           <span className="text-sm text-chrome">
-            {pingQuery.isLoading ? 'Checking...' : pingQuery.data?.message ?? 'Unknown'}
+            {pingQuery.isLoading ? 'Checking...' : pingQuery.data?.connected ? 'Connected' : (pingQuery.data?.error || 'Unknown')}
           </span>
         </div>
         {!pingQuery.data?.connected && (
           <div className="bg-warning/10 border border-warning/20 rounded-lg p-4 mb-4">
-            <p className="text-sm text-warning flex items-center gap-2">
-              <AlertTriangle size={16} />
-              Fullbay is not connected. Check your environment variables:
-            </p>
-            <ul className="text-xs text-steel mt-2 ml-6 list-disc">
-              <li>FULLBAY_BASE_URL (e.g., https://yourshop.fullbay.com)</li>
-              <li>FULLBAY_API_KEY (from your Fullbay account)</li>
-            </ul>
+
+       <p className="text-sm text-warning flex items-center gap-2">
+           <AlertTriangle size={16} />
+              Fullbay error: {pingQuery.data?.error || 'Unknown error'}
+        </p>
+        <p className="text-xs text-steel mt-2">
+            Make sure FULLBAY_API_KEY is set in Railway Variables.
+        </p>     
           </div>
         )}
       </div>
