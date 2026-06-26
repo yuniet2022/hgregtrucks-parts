@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useParts } from '../hooks/useParts';
-import type { Part } from '../types/Part';
+import { useVariants } from '../hooks/useVariants';
+import type { Part, PartVariant } from '../types/Part';
 import { useAuth } from '@/hooks/useAuth';
 import HGregLogo from '../components/HGregLogo';
 import {
@@ -22,6 +23,9 @@ import {
   Store,
   PackageCheck,
   Truck,
+  RefreshCw,
+  Link2,
+  ExternalLink,
 } from 'lucide-react';
 import { trpc } from '@/providers/trpc';
 
@@ -67,7 +71,7 @@ export default function Admin() {
 }
 
 function Dashboard({ onLogout, userName, isAdmin }: { onLogout: () => void; userName: string; isAdmin: boolean }) {
-  const [activeTab, setActiveTab] = useState<'inventory' | 'users' | 'messages'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'users' | 'messages' | 'fullbay'>('inventory');
   const {
     parts,
     filtered,
@@ -164,12 +168,24 @@ function Dashboard({ onLogout, userName, isAdmin }: { onLogout: () => void; user
               <span className="flex items-center gap-2"><Users size={16} /> Users</span>
             </button>
           )}
+          <button
+            onClick={() => setActiveTab('fullbay')}
+            className={`px-5 py-3 text-sm font-medium tracking-[0.04em] uppercase transition-colors border-b-2 ${
+              activeTab === 'fullbay'
+                ? 'text-amber border-amber'
+                : 'text-steel border-transparent hover:text-chrome'
+            }`}
+          >
+            <span className="flex items-center gap-2"><Link2 size={16} /> Fullbay</span>
+          </button>
         </div>
 
         {activeTab === 'users' && isAdmin ? (
           <UserManagement />
         ) : activeTab === 'messages' ? (
           <MessageManagement />
+        ) : activeTab === 'fullbay' ? (
+          <FullbaySyncPanel />
         ) : (
           <>
         {/* Toolbar */}
@@ -253,10 +269,22 @@ function Dashboard({ onLogout, userName, isAdmin }: { onLogout: () => void; user
               <tbody>
                 {filtered.map((part: any) => (
                   <tr key={part.id} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
-                    <td className="px-4 py-3"><img src={part.image} alt={part.name} className="w-12 h-12 rounded object-cover bg-obsidian" /></td>
+                    <td className="px-4 py-3 relative">
+                      <img
+                        src={part.image || '/no-photo.png'}
+                        alt={part.name}
+                        className={`w-12 h-12 rounded object-cover ${part.image === '/no-photo.png' || !part.image ? 'opacity-60' : ''}`}
+                      />
+                      {(part.image === '/no-photo.png' || !part.image) && (
+                        <span className="absolute -top-1 -right-1 bg-warning text-obsidian text-[8px] font-bold px-1 py-0.5 rounded">!</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium text-chrome">{part.name}</p>
                       <p className="text-xs text-steel mt-0.5">{part.sku}</p>
+                      {part.source === 'fullbay' && (
+                        <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-teal/10 text-teal border border-teal/20">Fullbay</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-steel font-mono">{part.oemNumber}</td>
                     <td className="px-4 py-3 text-sm text-steel">{part.brand}</td>
@@ -315,6 +343,103 @@ function Dashboard({ onLogout, userName, isAdmin }: { onLogout: () => void; user
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function FullbaySyncPanel() {
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const pingQuery = trpc.fullbay.ping.useQuery();
+  const syncMutation = trpc.fullbay.syncInventory.useMutation({
+    onSuccess: (data) => {
+      setSyncResult(`Created: ${data.created} | Updated: ${data.updated} | Skipped: ${data.skipped} | Errors: ${data.errors}`);
+      setSyncing(false);
+    },
+    onError: (err) => {
+      setSyncResult(`Error: ${err.message}`);
+      setSyncing(false);
+    },
+  });
+
+  const handleSync = () => {
+    setSyncing(true);
+    setSyncResult(null);
+    syncMutation.mutate({ daysBack: 30 });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Connection Status */}
+      <div className="bg-ink rounded-xl border border-white/[0.06] p-6">
+        <h3 className="text-lg font-medium text-chrome mb-4 flex items-center gap-2">
+          <Link2 size={20} className="text-amber" />
+          Fullbay Connection
+        </h3>
+        <div className="flex items-center gap-3 mb-4">
+          <div className={`w-3 h-3 rounded-full ${pingQuery.data?.connected ? 'bg-teal' : 'bg-warning'} animate-pulse`} />
+          <span className="text-sm text-chrome">
+            {pingQuery.isLoading ? 'Checking...' : pingQuery.data?.message ?? 'Unknown'}
+          </span>
+        </div>
+        {!pingQuery.data?.connected && (
+          <div className="bg-warning/10 border border-warning/20 rounded-lg p-4 mb-4">
+            <p className="text-sm text-warning flex items-center gap-2">
+              <AlertTriangle size={16} />
+              Fullbay is not connected. Check your environment variables:
+            </p>
+            <ul className="text-xs text-steel mt-2 ml-6 list-disc">
+              <li>FULLBAY_BASE_URL (e.g., https://yourshop.fullbay.com)</li>
+              <li>FULLBAY_API_KEY (from your Fullbay account)</li>
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* Sync Actions */}
+      <div className="bg-ink rounded-xl border border-white/[0.06] p-6">
+        <h3 className="text-lg font-medium text-chrome mb-4 flex items-center gap-2">
+          <RefreshCw size={20} className="text-amber" />
+          Inventory Sync
+        </h3>
+        <p className="text-sm text-steel mb-4">
+          Pull the latest inventory adjustments from Fullbay to update stock levels in this system.
+          Only parts with matching SKUs will be updated.
+        </p>
+        <button
+          onClick={handleSync}
+          disabled={syncing || !pingQuery.data?.connected}
+          className="bg-amber text-obsidian rounded-lg px-6 py-3 text-sm font-semibold tracking-[0.04em] uppercase hover:bg-chrome transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
+          {syncing ? 'Syncing...' : 'Sync Now'}
+        </button>
+        {syncResult && (
+          <p className="text-sm text-teal mt-3 bg-teal/10 rounded-lg px-4 py-2">{syncResult}</p>
+        )}
+      </div>
+
+      {/* Info Card */}
+      <div className="bg-ink rounded-xl border border-white/[0.06] p-6">
+        <h3 className="text-lg font-medium text-chrome mb-4">How It Works</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-steel">
+          <div className="space-y-2">
+            <p className="text-chrome font-medium flex items-center gap-2">
+              <Truck size={16} className="text-teal" />
+              Fullbay → Website
+            </p>
+            <p>Stock levels are pulled from Fullbay adjustments. When inventory changes in Fullbay, click "Sync Now" to update this system.</p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-chrome font-medium flex items-center gap-2">
+              <ExternalLink size={16} className="text-teal" />
+              Website → Fullbay
+            </p>
+            <p>Online sales are automatically sent to Fullbay as Counter Sales. No manual action needed.</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -603,6 +728,7 @@ function MessageManagement() {
 
 function PartModal({ part, onClose, onSave }: { part: Part | null; onClose: () => void; onSave: () => void }) {
   const { addPart, updatePart } = useParts();
+  const { variants: existingVariants, batchUpdate } = useVariants(part?.id);
   const isEditing = !!part;
 
   const [form, setForm] = useState({
@@ -626,7 +752,12 @@ function PartModal({ part, onClose, onSave }: { part: Part | null; onClose: () =
     deliver: part?.deliver ?? 1,
     ship: part?.ship ?? 1,
     engine: (part as any)?.engine || '',
+    coreCharge: (part as any)?.coreCharge || '',
+    coreRebate: (part as any)?.coreRebate || '',
+    variantLabel: (part as any)?.variantLabel || 'Size',
+    source: (part as any)?.source || 'manual',
   });
+  const [variants, setVariants] = useState<PartVariant[]>([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<number | null>(null);
@@ -656,16 +787,23 @@ function PartModal({ part, onClose, onSave }: { part: Part | null; onClose: () =
         deliver: part.deliver ?? 1,
         ship: part.ship ?? 1,
         engine: (part as any).engine || '',
+        coreCharge: (part as any).coreCharge || '',
+        coreRebate: (part as any).coreRebate || '',
+        variantLabel: (part as any).variantLabel || 'Size',
+        source: (part as any).source || 'manual',
       });
+      setVariants(existingVariants.map(v => ({ ...v })));
     } else {
       setForm({
         name: '', sku: '', price: '', stock: 0, category: 'Engine',
         make: '', model: '', yearFrom: 2020, yearTo: 2024,
         description: '', image: '', image2: '', image3: '', image4: '',
         oemNumber: '', brand: '', pickup: 1, deliver: 1, ship: 1, engine: '',
+        coreCharge: '', coreRebate: '', variantLabel: 'Size', source: 'manual',
       });
+      setVariants([]);
     }
-  }, [part?.id]);
+  }, [part?.id, existingVariants]);
 
   const CATEGORIES = ['Engine', 'Transmission', 'Brake', 'Suspension', 'Electrical', 'Body', 'Cooling', 'Air System', 'Emissions', 'Lighting', 'Chassis', 'Interior', 'Lubrication', 'Tools', 'Chemicals'];
   const MAKES = ['Kenworth', 'Peterbilt', 'Freightliner', 'Volvo', 'Mack', 'International', 'Western Star', 'Isuzu', 'Universal'];
@@ -709,7 +847,10 @@ function PartModal({ part, onClose, onSave }: { part: Part | null; onClose: () =
       const data = new FormData();
       data.append('file', file);
 
-      const res = await fetch('/api/cloudinary-upload', {
+      const uploadUrl = window.location.hostname.includes('kimi.page')
+        ? 'https://hgregtrucksparts.com/api/cloudinary-upload'
+        : '/api/cloudinary-upload';
+      const res = await fetch(uploadUrl, {
         method: 'POST',
         body: data,
       });
@@ -749,6 +890,18 @@ function PartModal({ part, onClose, onSave }: { part: Part | null; onClose: () =
     try {
       if (isEditing && part) {
         updatePart(part.id, form);
+        // Save variants if any
+        if (variants.length > 0) {
+          batchUpdate({
+            partId: part.id,
+            variants: variants.map(v => ({
+              variantName: v.variantName,
+              price: v.price,
+              stock: v.stock,
+              sku: v.sku,
+            })),
+          });
+        }
       } else {
         addPart(form as Omit<Part, 'id'>);
       }
@@ -768,6 +921,94 @@ function PartModal({ part, onClose, onSave }: { part: Part | null; onClose: () =
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && <p className="text-red-400 text-sm bg-red-400/10 rounded-lg px-4 py-2">{error}</p>}
+
+          {/* Variants (Size, Color, etc.) */}
+          <div>
+            <label className="block text-xs text-steel uppercase tracking-wider mb-2">Variants (Optional)</label>
+            <p className="text-[11px] text-steel mb-2">Add options if this part comes in multiple sizes, colors, etc. Leave empty for single-option parts.</p>
+            <div className="flex items-center gap-3 mb-3">
+              <label className="text-xs text-steel">Label:</label>
+              <input
+                type="text"
+                value={form.variantLabel}
+                onChange={(e) => handleChange('variantLabel', e.target.value)}
+                placeholder="Size, Color, Side..."
+                className="w-32 bg-obsidian border border-white/[0.12] rounded-lg px-3 py-1.5 text-sm text-chrome placeholder:text-steel/50 focus:border-amber focus:outline-none"
+              />
+            </div>
+            {variants.length > 0 && (
+              <div className="space-y-2 mb-3">
+                <div className="grid grid-cols-12 gap-2 text-[10px] text-steel uppercase">
+                  <div className="col-span-3">{form.variantLabel || 'Option'}</div>
+                  <div className="col-span-3">Price</div>
+                  <div className="col-span-2">Stock</div>
+                  <div className="col-span-3">SKU</div>
+                  <div className="col-span-1"></div>
+                </div>
+                {variants.map((v, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-2">
+                    <input
+                      type="text"
+                      value={v.variantName}
+                      onChange={(e) => {
+                        const updated = [...variants];
+                        updated[i] = { ...v, variantName: e.target.value };
+                        setVariants(updated);
+                      }}
+                      placeholder="18 inch"
+                      className="col-span-3 bg-obsidian border border-white/[0.12] rounded-lg px-3 py-2 text-sm text-chrome focus:border-amber focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={v.price}
+                      onChange={(e) => {
+                        const updated = [...variants];
+                        updated[i] = { ...v, price: e.target.value };
+                        setVariants(updated);
+                      }}
+                      placeholder="24.99"
+                      className="col-span-3 bg-obsidian border border-white/[0.12] rounded-lg px-3 py-2 text-sm text-chrome focus:border-amber focus:outline-none"
+                    />
+                    <input
+                      type="number"
+                      value={v.stock}
+                      onChange={(e) => {
+                        const updated = [...variants];
+                        updated[i] = { ...v, stock: Number(e.target.value) };
+                        setVariants(updated);
+                      }}
+                      className="col-span-2 bg-obsidian border border-white/[0.12] rounded-lg px-3 py-2 text-sm text-chrome focus:border-amber focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={v.sku}
+                      onChange={(e) => {
+                        const updated = [...variants];
+                        updated[i] = { ...v, sku: e.target.value };
+                        setVariants(updated);
+                      }}
+                      placeholder="SKU-18"
+                      className="col-span-3 bg-obsidian border border-white/[0.12] rounded-lg px-3 py-2 text-sm text-chrome focus:border-amber focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVariants(variants.filter((_, idx) => idx !== i))}
+                      className="col-span-1 text-steel hover:text-warning transition-colors flex items-center justify-center"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setVariants([...variants, { id: 0, partId: part?.id || 0, variantName: '', price: '', stock: 0, sku: '' }])}
+              className="text-xs text-amber hover:text-chrome transition-colors flex items-center gap-1"
+            >
+              <Plus size={14} /> Add {form.variantLabel || 'Option'}
+            </button>
+          </div>
 
           {/* Image Upload - 4 images */}
           <div>
@@ -888,6 +1129,36 @@ function PartModal({ part, onClose, onSave }: { part: Part | null; onClose: () =
             <div>
               <label className="block text-xs text-steel uppercase tracking-wider mb-1">OEM Number *</label>
               <input type="text" value={form.oemNumber} onChange={(e) => handleChange('oemNumber', e.target.value)} className="w-full bg-obsidian border border-white/[0.12] rounded-lg px-4 py-2.5 text-sm text-chrome focus:border-amber focus:outline-none" placeholder="e.g. 288210500" />
+            </div>
+          </div>
+
+          {/* Core Charge */}
+          <div>
+            <label className="block text-xs text-steel uppercase tracking-wider mb-2">Core Charge</label>
+            <p className="text-[11px] text-steel mb-2">Charge when customer does NOT return old part. Rebate when they do.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-steel uppercase tracking-wider mb-1">Core Charge ($)</label>
+                <input
+                  type="text"
+                  value={form.coreCharge || ''}
+                  onChange={(e) => handleChange('coreCharge', e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-obsidian border border-white/[0.12] rounded-lg px-4 py-2.5 text-sm text-chrome placeholder:text-steel/50 focus:border-amber focus:outline-none"
+                />
+                <p className="text-[10px] text-steel mt-1">Added to price if no core returned</p>
+              </div>
+              <div>
+                <label className="block text-[10px] text-steel uppercase tracking-wider mb-1">Core Rebate ($)</label>
+                <input
+                  type="text"
+                  value={form.coreRebate || ''}
+                  onChange={(e) => handleChange('coreRebate', e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-obsidian border border-white/[0.12] rounded-lg px-4 py-2.5 text-sm text-chrome placeholder:text-steel/50 focus:border-amber focus:outline-none"
+                />
+                <p className="text-[10px] text-steel mt-1">Discount when core is returned</p>
+              </div>
             </div>
           </div>
 
