@@ -11,9 +11,9 @@ const createPaymentIntent = publicQuery.input(
   try {
     const { default: Stripe } = await import("stripe");
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-if (!stripeSecretKey) {
-  throw new Error("STRIPE_SECRET_KEY not configured");
-}
+    if (!stripeSecretKey) {
+      throw new Error("STRIPE_SECRET_KEY not configured");
+    }
     const stripe = new Stripe(stripeSecretKey, {
       apiVersion: "2024-12-18.acacia",
     });
