@@ -71,7 +71,7 @@ export default function Checkout() {
             </div>
             <div className="flex items-center gap-2 text-steel">
               <Truck size={16} className="text-teal" />
-              Pickup available at 2900 NW 36th St, Miami
+              <span>Pickup: 2900 NW 36th St, Miami, FL 33142 or 7500 NW 82 PL, Medley, FL 33166</span>
             </div>
           </div>
           <button
