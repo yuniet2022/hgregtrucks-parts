@@ -1,86 +1,78 @@
-import { z } from "zod";
-import { eq, like } from "drizzle-orm";
-import { createRouter, publicQuery, adminQuery } from "./middleware";
-import { getDb } from "./queries/connection";
-import { parts } from "@db/schema";
-import { getInventoryAdjustments, pingFullbay } from "./fullbay-service";
+/**
+ * Fullbay Inventory Sync Service
+ * Docs: https://gist.github.com/EpikaNick/38f2ac3ee83bd7f84f5f991ffb43e5a1
+ *
+ * Fullbay API uses SHA1 token authentication:
+ *   token = sha1(key + todaysDate + ipAddress)
+ *
+ * Env vars:
+ *   FULLBAY_API_KEY  - Your Fullbay API key (e.g. 88816fee-5d15-e4ee-ab41-a3020a6c742c)
+ *   FULLBAY_IP       - Public IP of your Railway server (get from Railway dashboard)
+ */
 
-export const fullbayRouter = createRouter({
-  myIp: publicQuery.query(async ({ ctx }) => {
-    // Return the server's public IP so user can set FULLBAY_IP env var
-    const ip = ctx.req.headers.get("x-forwarded-for") ||
-               ctx.req.headers.get("x-real-ip") ||
-               "unknown";
-    return { ip };
-  }),
+import { createHash } from "crypto";
 
-  ping: adminQuery.query(async () => {
-    try {
-      const ok = await pingFullbay();
-      return { connected: ok };
-    } catch (e: any) {
-      return { connected: false, error: e.message };
-    }
-  }),
+const API_KEY = () => {
+  const key = process.env.FULLBAY_API_KEY;
+  if (!key) throw new Error("FULLBAY_API_KEY not set");
+  return key;
+};
 
-  syncInventory: adminQuery
-    .input(z.object({ daysBack: z.number().min(1).max(365).optional() }).optional())
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      const days = input?.daysBack ?? 30;
-      const adjustments = await getInventoryAdjustments(days);
+const SERVER_IP = () => {
+  const ip = process.env.FULLBAY_IP;
+  if (!ip) throw new Error("FULLBAY_IP not set. Get your Railway server public IP from the Railway dashboard.");
+  return ip;
+};
 
-      let created = 0;
-      let updated = 0;
-      let skipped = 0;
-      const errors: string[] = [];
+function generateToken(): string {
+  const key = API_KEY();
+  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+  const ip = SERVER_IP();
+  const hashInput = `${key}${today}${ip}`;
+  return createHash("sha1").update(hashInput).digest("hex");
+}
 
-      for (const adj of adjustments) {
-        try {
-          // Skip if missing essential data
-          if (!adj.PartNumber || !adj.PartName) { skipped++; continue; }
+async function fb(endpoint: string, params: Record<string, string> = {}): Promise<any> {
+  const url = new URL(`https://app.fullbay.com/services/${endpoint}`);
 
-          // Check if part already exists by SKU
-          const existing = await db
-            .select()
-            .from(parts)
-            .where(eq(parts.sku, adj.PartNumber));
+  // Add auth params
+  url.searchParams.set("key", API_KEY());
+  url.searchParams.set("token", generateToken());
 
-          if (existing.length > 0) {
-            // Update stock only
-            await db
-              .update(parts)
-              .set({ stock: adj.NewOnHand })
-              .where(eq(parts.id, existing[0].id));
-            updated++;
-          } else {
-            // Create new part from Fullbay data
-            await db.insert(parts).values({
-              name: adj.PartName,
-              sku: adj.PartNumber,
-              price: "0",
-              stock: adj.NewOnHand,
-              category: "General",
-              make: "Universal",
-              model: "All",
-              yearFrom: 1990,
-              yearTo: 2026,
-              description: `Imported from Fullbay. Reason: ${adj.Reason || "N/A"}`,
-              image: "/no-photo.png", // Placeholder - admin must upload real image
-              oemNumber: adj.PartNumber,
-              brand: "",
-              pickup: 1,
-              deliver: 1,
-              ship: 1,
-              source: "fullbay",
-            });
-            created++;
-          }
-        } catch (e: any) {
-          errors.push(`${adj.PartNumber}: ${e.message}`);
-        }
-      }
+  // Add all other params
+  for (const [k, v] of Object.entries(params)) {
+    url.searchParams.set(k, v);
+  }
 
-      return { created, updated, skipped, errors: errors.length, total: adjustments.length };
-    }),
-});
+  const res = await fetch(url.toString(), { method: "GET" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+  const json = await res.json();
+  if (json.Error) throw new Error(json.Error);
+  return json;
+}
+
+export interface FbAdjustment {
+  PartNumber: string;
+  PartName: string;
+  QtyChanged: number;
+  NewOnHand: number;
+  Reason: string;
+  Date: string;
+  Location: string;
+}
+
+/** Read inventory adjustments from Fullbay (last 7 days max per API limit) */
+export async function getInventoryAdjustments(daysBack = 7): Promise<FbAdjustment[]> {
+  const end = new Date().toISOString().split("T")[0];
+  const start = new Date(Date.now() - daysBack * 86400000).toISOString().split("T")[0];
+  const json = await fb("getAdjustments.php", { startDate: start, endDate: end });
+  return (json.Data ?? []) as FbAdjustment[];
+}
+
+/** Quick connectivity check */
+export async function pingFullbay(): Promise<boolean> {
+  try {
+    await fb("getAdjustments.php", { startDate: "2024-01-01", endDate: "2024-01-02" });
+    return true;
+  } catch { return false; }
+}
