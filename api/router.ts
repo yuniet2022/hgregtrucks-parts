@@ -1,8 +1,10 @@
 import { authRouter } from "./auth-router";
 import { localAuthRouter } from "./local-auth-router";
 import { partsRouter } from "./parts-router";
+import { variantsRouter } from "./variants-router";
 import { messagesRouter } from "./messages-router";
 import { paymentsRouter } from "./payments-router";
+import { fullbayRouter } from "./fullbay-router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -10,8 +12,11 @@ export const appRouter = createRouter({
   auth: authRouter,
   localAuth: localAuthRouter,
   parts: partsRouter,
+  variants: variantsRouter,
   messages: messagesRouter,
   payments: paymentsRouter,
+  fullbay: fullbayRouter,
 });
 
 export type AppRouter = typeof appRouter;
+
