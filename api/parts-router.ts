@@ -82,6 +82,9 @@ export const partsRouter = createRouter({
       pickup: z.number().min(0).max(1).optional(),
       deliver: z.number().min(0).max(1).optional(),
       ship: z.number().min(0).max(1).optional(),
+      engine: z.string().optional(),
+      coreCharge: z.string().optional(),
+      coreRebate: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -112,6 +115,9 @@ export const partsRouter = createRouter({
       pickup: z.number().min(0).max(1).optional(),
       deliver: z.number().min(0).max(1).optional(),
       ship: z.number().min(0).max(1).optional(),
+      engine: z.string().optional(),
+      coreCharge: z.string().optional(),
+      coreRebate: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const { id, ...updates } = input;
