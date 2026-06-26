@@ -1,3 +1,13 @@
+export interface PartVariant {
+  id: number;
+  partId: number;
+  variantName: string;
+  price: string;
+  stock: number;
+  sku: string;
+  createdAt?: Date;
+}
+
 export interface Part {
   id: number;
   name: string;
@@ -19,6 +29,12 @@ export interface Part {
   pickup: number;
   deliver: number;
   ship: number;
+  engine?: string;
+  coreCharge?: string;
+  coreRebate?: string;
+  variants?: PartVariant[];
+  variantLabel?: string;
+  source?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
