@@ -226,6 +226,52 @@ if (env.isProduction) {
     console.error("[DB] Failed to initialize pool at startup:", e.message);
   }
 
+  // Auto-run DB migrations on startup
+  try {
+    const dbUrl = env.databaseUrl;
+    if (dbUrl) {
+      const url = new URL(dbUrl);
+      const conn = await createConnection({
+        host: url.hostname,
+        port: parseInt(url.port) || 3306,
+        user: url.username,
+        password: decodeURIComponent(url.password),
+        database: url.pathname.slice(1),
+        ssl: { rejectUnauthorized: false },
+      });
+      // Add missing columns if they don't exist
+      try { await conn.execute(`ALTER TABLE parts ADD COLUMN image2 VARCHAR(500)`); console.log("[DB MIGRATION] Added image2"); } catch { /* exists */ }
+      try { await conn.execute(`ALTER TABLE parts ADD COLUMN image3 VARCHAR(500)`); console.log("[DB MIGRATION] Added image3"); } catch { /* exists */ }
+      try { await conn.execute(`ALTER TABLE parts ADD COLUMN image4 VARCHAR(500)`); console.log("[DB MIGRATION] Added image4"); } catch { /* exists */ }
+      try { await conn.execute(`ALTER TABLE parts ADD COLUMN pickup TINYINT(1) NOT NULL DEFAULT 1`); console.log("[DB MIGRATION] Added pickup"); } catch { /* exists */ }
+      try { await conn.execute(`ALTER TABLE parts ADD COLUMN deliver TINYINT(1) NOT NULL DEFAULT 1`); console.log("[DB MIGRATION] Added deliver"); } catch { /* exists */ }
+      try { await conn.execute(`ALTER TABLE parts ADD COLUMN ship TINYINT(1) NOT NULL DEFAULT 1`); console.log("[DB MIGRATION] Added ship"); } catch { /* exists */ }
+      try { await conn.execute(`ALTER TABLE parts ADD COLUMN engine VARCHAR(100)`); console.log("[DB MIGRATION] Added engine"); } catch { /* exists */ }
+      try { await conn.execute(`ALTER TABLE parts ADD COLUMN coreCharge VARCHAR(20) DEFAULT '0'`); console.log("[DB MIGRATION] Added coreCharge"); } catch { /* exists */ }
+      try { await conn.execute(`ALTER TABLE parts ADD COLUMN coreRebate VARCHAR(20) DEFAULT '0'`); console.log("[DB MIGRATION] Added coreRebate"); } catch { /* exists */ }
+      try { await conn.execute(`ALTER TABLE parts ADD COLUMN source VARCHAR(20) DEFAULT 'manual'`); console.log("[DB MIGRATION] Added source"); } catch { /* exists */ }
+      // Create part_variants table
+      try {
+        await conn.execute(`
+          CREATE TABLE IF NOT EXISTS part_variants (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            partId INT UNSIGNED NOT NULL,
+            variantName VARCHAR(100) NOT NULL,
+            price VARCHAR(20) NOT NULL,
+            stock INT UNSIGNED NOT NULL DEFAULT 0,
+            sku VARCHAR(100) NOT NULL,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        console.log("[DB MIGRATION] Created part_variants table");
+      } catch (e: any) { console.log("[DB MIGRATION] part_variants table exists or error:", e.message); }
+      await conn.end();
+      console.log("[DB MIGRATION] All migrations completed");
+    }
+  } catch (e: any) {
+    console.error("[DB MIGRATION] Failed:", e.message);
+  }
+
   const { serve } = await import("@hono/node-server");
   const port = parseInt(process.env.PORT || "8080");
   serve({ fetch: app.fetch, port }, () => {
