@@ -19,7 +19,19 @@ export const fullbayRouter = createRouter({
     const result = await pingFullbay();
     return { connected: result.ok, error: result.error || null };
   }),
-
+  debug: adminQuery.query(async () => {
+    try {
+      const adjustments = await getInventoryAdjustments(365);
+      return { 
+        ok: true, 
+        count: adjustments.length,
+        firstFew: adjustments.slice(0, 3),
+        serverIp: "auto-detected"
+      };
+    } catch (e: any) {
+      return { ok: false, error: e.message };
+    }
+  }),
   syncInventory: adminQuery
     .input(z.object({ daysBack: z.number().min(1).max(365).optional() }).optional())
     .mutation(async ({ input }) => {
