@@ -58,6 +58,9 @@ export const parts = mysqlTable("parts", {
   pickup: int("pickup", { unsigned: true }).default(1).notNull(),
   deliver: int("deliver", { unsigned: true }).default(1).notNull(),
   ship: int("ship", { unsigned: true }).default(1).notNull(),
+  coreCharge: varchar("coreCharge", { length: 20 }).default("0"),
+  coreRebate: varchar("coreRebate", { length: 20 }).default("0"),
+  source: varchar("source", { length: 20 }).default("manual"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
@@ -74,6 +77,16 @@ export const admins = mysqlTable("admins", {
 });
 
 export type Admin = typeof admins.$inferSelect;
+
+export const partVariants = mysqlTable("part_variants", {
+  id: serial("id").primaryKey(),
+  partId: int("partId", { unsigned: true }).notNull(),
+  variantName: varchar("variantName", { length: 100 }).notNull(),
+  price: varchar("price", { length: 20 }).notNull(),
+  stock: int("stock", { unsigned: true }).default(0).notNull(),
+  sku: varchar("sku", { length: 100 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
 
 export const messages = mysqlTable("messages", {
   id: serial("id").primaryKey(),
@@ -93,3 +106,4 @@ export type InsertMessage = typeof messages.$inferInsert;
 
 // Note: FK columns referencing a serial() PK must use:
 //   bigint("columnName", { mode: "number", unsigned: true }).notNull()
+
