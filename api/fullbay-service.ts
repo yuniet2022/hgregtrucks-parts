@@ -79,11 +79,14 @@ export async function getInventoryAdjustments(daysBack = 7): Promise<FbAdjustmen
   return (json.Data ?? []) as FbAdjustment[];
 }
 
-export async function pingFullbay(): Promise<boolean> {
+/** Quick connectivity check — returns error message if fails */
+export async function pingFullbay(): Promise<{ ok: boolean; error?: string }> {
   try {
     await fb("getAdjustments.php", { startDate: "2024-01-01", endDate: "2024-01-02" });
-    return true;
-  } catch { return false; }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
 }
 
 export async function getDetectedIp(): Promise<string> {
