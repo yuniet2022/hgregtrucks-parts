@@ -47,13 +47,8 @@ async function fb(endpoint: string, params: Record<string, string> = {}): Promis
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v);
   }
-
-  console.log("[FULLBAY] >>> URL:", url.toString().replace(API_KEY(), "***"));
-
   const res = await fetch(url.toString(), { method: "GET" });
   const text = await res.text();
-  console.log("[FULLBAY] <<< Raw:", text.substring(0, 300));
-
   try {
     const json = JSON.parse(text);
     return json;
@@ -72,10 +67,6 @@ export interface FbAdjustment {
   Location: string;
 }
 
-/**
- * Fetch adjustments in 7-day chunks (Fullbay API limit).
- * Parts are nested inside adjustment.Lines[]
- */
 export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustment[]> {
   const all: FbAdjustment[] = [];
   const now = new Date();
@@ -84,34 +75,27 @@ export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustm
   let remaining = daysBack;
   let chunkNum = 0;
 
-  console.log(`[FULLBAY] Starting sync for ${daysBack} days`);
-
   while (remaining > 0) {
     const size = Math.min(remaining, 7);
     const chunkStart = new Date(chunkEnd.getTime() - size * msDay);
     const s = chunkStart.toISOString().split("T")[0];
     const e = chunkEnd.toISOString().split("T")[0];
 
-    console.log(`[FULLBAY] Chunk ${++chunkNum}: ${s} to ${e}`);
     const json = await fb("getAdjustments.php", { startDate: s, endDate: e });
-
     const resultSet = json.resultSet || [];
+
     for (const adjustment of resultSet) {
       const lines = adjustment.Lines || [];
-      if (lines.length > 0) {
-        console.log(`[FULLBAY] Adj ${adjustment.primaryKey}: ${lines.length} lines, keys:`, Object.keys(lines[0]));
-        console.log(`[FULLBAY] Sample line:`, JSON.stringify(lines[0]).substring(0, 250));
-      }
       for (const line of lines) {
-        if (line.partNumber || line.PartNumber) {
+        if (line.partNumber) {
           all.push({
-            PartNumber: line.partNumber || line.PartNumber || "",
-            PartName: line.partName || line.PartName || line.partDescription || line.PartDescription || "Unknown",
-            QtyChanged: Number(line.qtyChanged || line.QtyChanged || 0),
-            NewOnHand: Number(line.newOnHand || line.NewOnHand || line.qtyOnHand || line.QtyOnHand || 0),
+            PartNumber: line.partNumber,
+            PartName: line.description || "Unknown",
+            QtyChanged: Number(line.quantityChange || 0),
+            NewOnHand: Number(line.quantityChange || 0),
             Reason: adjustment.type || "",
-            Date: adjustment.created || "",
-            Location: line.location || line.Location || "",
+            Date: line.created || adjustment.created || "",
+            Location: "",
           });
         }
       }
@@ -121,7 +105,6 @@ export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustm
     remaining -= size;
   }
 
-  console.log(`[FULLBAY] Total parts:`, all.length);
   return all;
 }
 
