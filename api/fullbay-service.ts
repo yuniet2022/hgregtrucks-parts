@@ -88,16 +88,19 @@ export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustm
     const s = chunkStart.toISOString().split("T")[0];
     const e = chunkEnd.toISOString().split("T")[0];
 
-    console.log(`[FULLBAY] Chunk ${++chunkNum}: ${s} to ${e} (${size} days)`);
+    console.log(`[FULLBAY] Chunk ${++chunkNum}: ${s} to ${e}`);
 
     const json = await fb("getAdjustments.php", { startDate: s, endDate: e });
-    console.log(`[FULLBAY] Chunk ${chunkNum} status:`, json.status);
+    console.log(`[FULLBAY] Chunk ${chunkNum} keys:`, Object.keys(json));
 
-    if (json.status === "SUCCESS" && json.Data) {
-      all.push(...json.Data);
-      console.log(`[FULLBAY] Chunk ${chunkNum} items:`, json.Data.length);
+    // FIX: Fullbay uses "resultSet" not "Data"
+    const items = json.resultSet || json.Data || [];
+    if (items.length > 0) {
+      all.push(...items);
+      console.log(`[FULLBAY] Chunk ${chunkNum} items:`, items.length);
+      if (items[0]) console.log(`[FULLBAY] First item keys:`, Object.keys(items[0]));
     } else {
-      console.log(`[FULLBAY] Chunk ${chunkNum} error:`, json.message || "no data");
+      console.log(`[FULLBAY] Chunk ${chunkNum}: empty`);
     }
 
     chunkEnd = new Date(chunkStart.getTime() - msDay);
@@ -107,7 +110,6 @@ export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustm
   console.log(`[FULLBAY] Total items:`, all.length);
   return all;
 }
-
 export async function pingFullbay(): Promise<{ ok: boolean; error?: string }> {
   try {
     const json = await fb("getAdjustments.php", { startDate: "2024-01-01", endDate: "2024-01-02" });
