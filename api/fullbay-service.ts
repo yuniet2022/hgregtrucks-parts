@@ -80,8 +80,6 @@ export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustm
   let remaining = daysBack;
   let chunkNum = 0;
 
-  console.log(`[FULLBAY] Starting sync for ${daysBack} days`);
-
   while (remaining > 0) {
     const size = Math.min(remaining, 7);
     const chunkStart = new Date(chunkEnd.getTime() - size * msDay);
@@ -89,25 +87,32 @@ export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustm
     const e = chunkEnd.toISOString().split("T")[0];
 
     console.log(`[FULLBAY] Chunk ${++chunkNum}: ${s} to ${e}`);
-
     const json = await fb("getAdjustments.php", { startDate: s, endDate: e });
-    console.log(`[FULLBAY] Chunk ${chunkNum} keys:`, Object.keys(json));
 
-    // FIX: Fullbay uses "resultSet" not "Data"
-    const items = json.resultSet || json.Data || [];
-    if (items.length > 0) {
-      all.push(...items);
-      console.log(`[FULLBAY] Chunk ${chunkNum} items:`, items.length);
-      if (items[0]) console.log(`[FULLBAY] First item keys:`, Object.keys(items[0]));
-    } else {
-      console.log(`[FULLBAY] Chunk ${chunkNum}: empty`);
+    const resultSet = json.resultSet || [];
+    for (const adjustment of resultSet) {
+      const lines = adjustment.Lines || [];
+      console.log(`[FULLBAY] Adjustment ${adjustment.primaryKey}: ${lines.length} lines`);
+      for (const line of lines) {
+        if (line.PartNumber && line.PartName) {
+          all.push({
+            PartNumber: line.PartNumber,
+            PartName: line.PartName,
+            QtyChanged: line.QtyChanged || 0,
+            NewOnHand: line.NewOnHand || 0,
+            Reason: adjustment.type || "",
+            Date: adjustment.created || "",
+            Location: line.Location || "",
+          });
+        }
+      }
     }
 
     chunkEnd = new Date(chunkStart.getTime() - msDay);
     remaining -= size;
   }
 
-  console.log(`[FULLBAY] Total items:`, all.length);
+  console.log(`[FULLBAY] Total parts:`, all.length);
   return all;
 }
 export async function pingFullbay(): Promise<{ ok: boolean; error?: string }> {
