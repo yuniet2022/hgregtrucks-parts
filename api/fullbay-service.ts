@@ -1,5 +1,5 @@
 /**
- * Fullbay Inventory Sync Service - DEBUG VERSION
+ * Fullbay Inventory Sync Service
  * Env vars: FULLBAY_API_KEY
  */
 
@@ -19,14 +19,12 @@ async function getServerIp(): Promise<string> {
     const res = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(5000) });
     const data = await res.json();
     cachedServerIp = data.ip;
-    console.log("[FULLBAY] Detected server IP:", cachedServerIp);
     return data.ip;
   } catch {
     try {
       const res = await fetch("https://ipinfo.io/json", { signal: AbortSignal.timeout(5000) });
       const data = await res.json();
       cachedServerIp = data.ip;
-      console.log("[FULLBAY] Detected server IP (fallback):", cachedServerIp);
       return data.ip;
     } catch (e: any) {
       throw new Error("Cannot detect server IP: " + e.message);
@@ -38,9 +36,7 @@ function generateToken(ip: string): string {
   const key = API_KEY();
   const today = new Date().toISOString().split("T")[0];
   const hashInput = `${key}${today}${ip}`;
-  const token = createHash("sha1").update(hashInput).digest("hex");
-  console.log("[FULLBAY] Token input:", { keyPrefix: key.substring(0,8), today, ipPrefix: ip.substring(0,6), tokenPrefix: token.substring(0,8) });
-  return token;
+  return createHash("sha1").update(hashInput).digest("hex");
 }
 
 async function fb(endpoint: string, params: Record<string, string> = {}): Promise<any> {
@@ -51,20 +47,13 @@ async function fb(endpoint: string, params: Record<string, string> = {}): Promis
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v);
   }
-
-  console.log("[FULLBAY] Request URL:", url.toString().replace(API_KEY(), "***KEY***"));
-
   const res = await fetch(url.toString(), { method: "GET" });
   const text = await res.text();
-  console.log("[FULLBAY] Raw response (first 500 chars):", text.substring(0, 500));
-
   try {
     const json = JSON.parse(text);
-    if (json.Error) throw new Error(json.Error);
     return json;
-  } catch (e: any) {
-    if (e.message.includes("JSON")) throw new Error("Invalid JSON response: " + text.substring(0, 200));
-    throw e;
+  } catch {
+    throw new Error("Invalid JSON: " + text.substring(0, 200));
   }
 }
 
@@ -78,24 +67,43 @@ export interface FbAdjustment {
   Location: string;
 }
 
+/**
+ * Fetch adjustments in 7-day chunks (Fullbay API limit).
+ * Combines results from multiple requests.
+ */
 export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustment[]> {
-  console.log("[FULLBAY] Fetching adjustments, daysBack:", daysBack);
-  const end = new Date().toISOString().split("T")[0];
-  const start = new Date(Date.now() - daysBack * 86400000).toISOString().split("T")[0];
-  console.log("[FULLBAY] Date range:", start, "to", end);
+  const allAdjustments: FbAdjustment[] = [];
+  const now = new Date();
+  const msPerDay = 86400000;
+  let chunkEnd = now;
+  let daysRemaining = daysBack;
 
-  const json = await fb("getAdjustments.php", { startDate: start, endDate: end });
-  const data = (json.Data ?? []) as FbAdjustment[];
-  console.log("[FULLBAY] Adjustments found:", data.length);
-  return data;
+  while (daysRemaining > 0) {
+    const chunkSize = Math.min(daysRemaining, 7);
+    const chunkStart = new Date(chunkEnd.getTime() - chunkSize * msPerDay);
+
+    const startStr = chunkStart.toISOString().split("T")[0];
+    const endStr = chunkEnd.toISOString().split("T")[0];
+
+    const json = await fb("getAdjustments.php", { startDate: startStr, endDate: endStr });
+
+    if (json.status === "SUCCESS" && json.Data) {
+      allAdjustments.push(...json.Data);
+    }
+
+    chunkEnd = new Date(chunkStart.getTime() - msPerDay);
+    daysRemaining -= chunkSize;
+  }
+
+  return allAdjustments;
 }
 
 export async function pingFullbay(): Promise<{ ok: boolean; error?: string }> {
   try {
-    await fb("getAdjustments.php", { startDate: "2024-01-01", endDate: "2024-01-02" });
+    const json = await fb("getAdjustments.php", { startDate: "2024-01-01", endDate: "2024-01-02" });
+    if (json.status === "FAIL") return { ok: false, error: json.message };
     return { ok: true };
   } catch (e: any) {
-    console.error("[FULLBAY] Ping failed:", e.message);
     return { ok: false, error: e.message };
   }
 }
