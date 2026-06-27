@@ -20,17 +20,15 @@ export const fullbayRouter = createRouter({
     return { connected: result.ok, error: result.error || null };
   }),
 
-    debug: adminQuery.query(async () => {
+   debug: adminQuery.query(async () => {
     try {
-      const adjustments = await getInventoryAdjustments(30); // Solo 30 días = 5 chunks
+      const { getInventoryAdjustments } = await import("./fullbay-service");
+      const adjustments = await getInventoryAdjustments(7); // Solo 7 días = 1 chunk
       return { 
         ok: true, 
         count: adjustments.length,
-        sample: adjustments.slice(0, 5).map((a: any) => ({ 
-          sku: a.PartNumber, 
-          name: a.PartName, 
-          stock: a.NewOnHand 
-        }))
+        firstItem: adjustments.length > 0 ? adjustments[0] : null,
+        fieldNames: adjustments.length > 0 ? Object.keys(adjustments[0]) : []
       };
     } catch (e: any) {
       return { ok: false, error: e.message };
