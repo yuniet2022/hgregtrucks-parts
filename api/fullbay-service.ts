@@ -1,12 +1,6 @@
 /**
- * Fullbay Inventory Sync Service
- * Docs: https://gist.github.com/EpikaNick/38f2ac3ee83bd7f84f5f991ffb43e5a1
- *
- * Fullbay API uses SHA1 token authentication:
- *   token = sha1(key + todaysDate + ipAddress)
- *
- * Env vars:
- *   FULLBAY_API_KEY  - Your Fullbay API key
+ * Fullbay Inventory Sync Service - DEBUG VERSION
+ * Env vars: FULLBAY_API_KEY
  */
 
 import { createHash } from "crypto";
@@ -17,25 +11,25 @@ const API_KEY = () => {
   return key;
 };
 
-// Cache the server IP
 let cachedServerIp: string | null = null;
 
-/** Get the server's public IP automatically */
 async function getServerIp(): Promise<string> {
   if (cachedServerIp) return cachedServerIp;
   try {
     const res = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(5000) });
     const data = await res.json();
     cachedServerIp = data.ip;
+    console.log("[FULLBAY] Detected server IP:", cachedServerIp);
     return data.ip;
   } catch {
     try {
       const res = await fetch("https://ipinfo.io/json", { signal: AbortSignal.timeout(5000) });
       const data = await res.json();
       cachedServerIp = data.ip;
+      console.log("[FULLBAY] Detected server IP (fallback):", cachedServerIp);
       return data.ip;
-    } catch {
-      throw new Error("Cannot determine server public IP.");
+    } catch (e: any) {
+      throw new Error("Cannot detect server IP: " + e.message);
     }
   }
 }
@@ -44,7 +38,9 @@ function generateToken(ip: string): string {
   const key = API_KEY();
   const today = new Date().toISOString().split("T")[0];
   const hashInput = `${key}${today}${ip}`;
-  return createHash("sha1").update(hashInput).digest("hex");
+  const token = createHash("sha1").update(hashInput).digest("hex");
+  console.log("[FULLBAY] Token input:", { keyPrefix: key.substring(0,8), today, ipPrefix: ip.substring(0,6), tokenPrefix: token.substring(0,8) });
+  return token;
 }
 
 async function fb(endpoint: string, params: Record<string, string> = {}): Promise<any> {
@@ -55,11 +51,21 @@ async function fb(endpoint: string, params: Record<string, string> = {}): Promis
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v);
   }
+
+  console.log("[FULLBAY] Request URL:", url.toString().replace(API_KEY(), "***KEY***"));
+
   const res = await fetch(url.toString(), { method: "GET" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-  const json = await res.json();
-  if (json.Error) throw new Error(json.Error);
-  return json;
+  const text = await res.text();
+  console.log("[FULLBAY] Raw response (first 500 chars):", text.substring(0, 500));
+
+  try {
+    const json = JSON.parse(text);
+    if (json.Error) throw new Error(json.Error);
+    return json;
+  } catch (e: any) {
+    if (e.message.includes("JSON")) throw new Error("Invalid JSON response: " + text.substring(0, 200));
+    throw e;
+  }
 }
 
 export interface FbAdjustment {
@@ -72,19 +78,24 @@ export interface FbAdjustment {
   Location: string;
 }
 
-export async function getInventoryAdjustments(daysBack = 7): Promise<FbAdjustment[]> {
+export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustment[]> {
+  console.log("[FULLBAY] Fetching adjustments, daysBack:", daysBack);
   const end = new Date().toISOString().split("T")[0];
   const start = new Date(Date.now() - daysBack * 86400000).toISOString().split("T")[0];
+  console.log("[FULLBAY] Date range:", start, "to", end);
+
   const json = await fb("getAdjustments.php", { startDate: start, endDate: end });
-  return (json.Data ?? []) as FbAdjustment[];
+  const data = (json.Data ?? []) as FbAdjustment[];
+  console.log("[FULLBAY] Adjustments found:", data.length);
+  return data;
 }
 
-/** Quick connectivity check — returns error message if fails */
 export async function pingFullbay(): Promise<{ ok: boolean; error?: string }> {
   try {
     await fb("getAdjustments.php", { startDate: "2024-01-01", endDate: "2024-01-02" });
     return { ok: true };
   } catch (e: any) {
+    console.error("[FULLBAY] Ping failed:", e.message);
     return { ok: false, error: e.message };
   }
 }
