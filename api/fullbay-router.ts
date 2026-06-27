@@ -4,7 +4,7 @@ import { createRouter, publicQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { parts } from "@db/schema";
 import { getInventoryAdjustments, pingFullbay, getDetectedIp } from "./fullbay-service";
-
+// FORCE REBUILD v2 - timestamp: 2025-06-27
 export const fullbayRouter = createRouter({
   myIp: publicQuery.query(async () => {
     try {
