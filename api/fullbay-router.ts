@@ -4,6 +4,7 @@ import { createRouter, publicQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { parts } from "@db/schema";
 import { getInventoryAdjustments, pingFullbay, getDetectedIp, fb } from "./fullbay-service";
+import { categorizePart } from "./part-categorizer";
 
 export const fullbayRouter = createRouter({
   myIp: publicQuery.query(async () => {
@@ -22,25 +23,36 @@ export const fullbayRouter = createRouter({
 
   debugPart: publicQuery.query(async () => {
     const testPart = "FALKEN";
-    const results: any = { testedPart: testPart };
-    
-    try {
-      const json = await fb("getParts.php", { partNumber: testPart });
-      results.getParts = { 
-        status: json.status, 
-        hasData: !!(json.Data || json.resultSet),
-        firstItem: json.Data?.[0] || json.resultSet?.[0] || null
-      };
-    } catch (e: any) { results.getParts = { error: e.message }; }
-    
-    try {
-      const json = await fb("getInventory.php", { partNumber: testPart });
-      results.getInventory = { 
-        status: json.status, 
-        hasData: !!(json.Data || json.resultSet),
-        firstItem: json.Data?.[0] || json.resultSet?.[0] || null
-      };
-    } catch (e: any) { results.getInventory = { error: e.message }; }
+    const results: any = { testedPart: testPart, endpoints: {} };
+
+    // List of endpoints to try
+    const endpoints = [
+      "getParts.php",
+      "getInventory.php",
+      "getPartCatalog.php",
+      "getItems.php",
+      "getInventoryItems.php",
+      "getProducts.php",
+      "getPartList.php",
+      "getStock.php",
+      "getPart.php",
+      "getAdjustments.php",
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        const json = await fb(endpoint, endpoint === "getAdjustments.php"
+          ? { startDate: "2024-01-01", endDate: "2024-01-07" }
+          : { partNumber: testPart });
+        results.endpoints[endpoint] = {
+          status: json.status || "unknown",
+          keys: Object.keys(json),
+          raw: json, // FULL raw JSON response
+        };
+      } catch (e: any) {
+        results.endpoints[endpoint] = { error: e.message };
+      }
+    }
 
     return results;
   }),
@@ -81,7 +93,7 @@ export const fullbayRouter = createRouter({
               sku: adj.PartNumber,
               price: "0",
               stock: adj.NewOnHand,
-              category: adj.Location || "General",
+              category: categorizePart(adj.PartName) || "General",
               make: "Universal",
               model: "All",
               yearFrom: 1990,
