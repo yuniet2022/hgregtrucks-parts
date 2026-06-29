@@ -62,10 +62,15 @@ export const fullbayRouter = createRouter({
             .where(eq(parts.sku, adj.PartNumber));
 
           if (existing.length > 0) {
-            await db
-              .update(parts)
-              .set({ stock: adj.NewOnHand })
-              .where(eq(parts.id, existing[0].id));
+//            await db
+ //             .update(parts)
+//              .set({ stock: adj.NewOnHand })
+//              .where(eq(parts.id, existing[0].id));
+            await db.update(parts).set({ 
+  stock: adj.NewOnHand,
+  name: existing[0].name === "Unknown" || existing[0].name === "Imported from Fullbay." ? adj.PartName : existing[0].name,
+  description: existing[0].description === "Imported from Fullbay." ? adj.PartName : existing[0].description,
+}).where(eq(parts.id, existing[0].id));
             updated++;
           } else {
             await db.insert(parts).values({
