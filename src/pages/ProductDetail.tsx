@@ -24,13 +24,15 @@ export default function ProductDetail() {
   const navigate = useNavigate();
   const { parts } = useParts();
   const { addItem, items: cartItems } = useCart();
+  const product = parts.find((p) => p.id === Number(id));
+  
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [mainImage, setMainImage] = useState('');
   const [returnCore, setReturnCore] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<number | null>(null);
 
-  const { variants: productVariants } = useVariants(product?.id);
+  const { variants: productVariants } = useVariants(product?.id?? undefined);
   const hasVariants = productVariants.length > 0;
   const activeVariant = hasVariants && selectedVariant !== null
     ? productVariants.find(v => v.id === selectedVariant)
