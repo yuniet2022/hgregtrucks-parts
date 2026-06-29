@@ -39,7 +39,7 @@ function generateToken(ip: string): string {
   return createHash("sha1").update(hashInput).digest("hex");
 }
 
-async function fb(endpoint: string, params: Record<string, string> = {}): Promise<any> {
+export async function fb(endpoint: string, params: Record<string, string> = {}): Promise<any> {
   const ip = await getServerIp();
   const url = new URL(`https://app.fullbay.com/services/${endpoint}`);
   url.searchParams.set("key", API_KEY());
