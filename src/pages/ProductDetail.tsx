@@ -41,8 +41,6 @@ export default function ProductDetail() {
   const displayStock = activeVariant ? activeVariant.stock : (product?.stock || 0);
   const displaySku = activeVariant ? activeVariant.sku : product?.sku;
 
-  const product = parts.find((p) => p.id === Number(id));
-
   // Build gallery from real images (filter out empty/null/undefined ones)
   const gallery = product
     ? [product.image, product.image2, product.image3, product.image4].filter((img): img is string => !!img && img.trim() !== '')
