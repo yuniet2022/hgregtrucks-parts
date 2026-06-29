@@ -90,11 +90,24 @@ export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustm
 
     const json = await fb("getAdjustments.php", { startDate: startStr, endDate: endStr });
 
-    if (json.status === "SUCCESS" && json.Data) {
-      const chunkData = json.Data as FbAdjustment[];
-      allAdjustments.push(...chunkData);
+    // Fullbay returns nested structure: resultSet[] → Lines[] → part fields
+    const resultSet = json.resultSet || json.Data || [];
+    for (const adjustment of resultSet) {
+      const lines = adjustment.Lines || [];
+      for (const line of lines) {
+        if (line.partNumber) {
+          allAdjustments.push({
+            PartNumber: line.partNumber,
+            PartName: line.description || line.partNumber,
+            QtyChanged: Number(line.quantityChange || 0),
+            NewOnHand: Number(line.quantityChange || 0),
+            Reason: adjustment.type || "",
+            Date: line.created || adjustment.created || "",
+            Location: "",
+          });
+        }
+      }
     }
-    // If FAIL, we continue with next chunk (don't throw)
 
     chunkEnd = new Date(chunkStart.getTime() - msPerDay); // Next chunk starts day before
     daysRemaining -= chunkSize;
