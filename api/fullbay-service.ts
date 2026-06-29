@@ -39,6 +39,20 @@ function generateToken(ip: string): string {
   return createHash("sha1").update(hashInput).digest("hex");
 }
 
+export interface FbAdjustment {
+  PartNumber: string;
+  PartName: string;
+  QtyChanged: number;
+  NewOnHand: number;
+  Reason: string;
+  Date: string;
+  Location: string;
+}
+
+/**
+ * Fetch adjustments in 7-day chunks (Fullbay API limit).
+ * Combines results from multiple requests.
+ */
 export async function fb(endpoint: string, params: Record<string, string> = {}): Promise<any> {
   const ip = await getServerIp();
   const url = new URL(`https://app.fullbay.com/services/${endpoint}`);
@@ -57,55 +71,36 @@ export async function fb(endpoint: string, params: Record<string, string> = {}):
   }
 }
 
-export interface FbAdjustment {
-  PartNumber: string;
-  PartName: string;
-  QtyChanged: number;
-  NewOnHand: number;
-  Reason: string;
-  Date: string;
-  Location: string;
-}
-
 export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustment[]> {
-  const all: FbAdjustment[] = [];
+  const allAdjustments: FbAdjustment[] = [];
   const now = new Date();
-  const msDay = 86400000;
+  const msPerDay = 86400000;
+
+  // Work backwards from today in 7-day chunks
   let chunkEnd = now;
-  let remaining = daysBack;
-  let chunkNum = 0;
+  const totalDays = daysBack;
+  let daysRemaining = totalDays;
 
-  while (remaining > 0) {
-    const size = Math.min(remaining, 7);
-    const chunkStart = new Date(chunkEnd.getTime() - size * msDay);
-    const s = chunkStart.toISOString().split("T")[0];
-    const e = chunkEnd.toISOString().split("T")[0];
+  while (daysRemaining > 0) {
+    const chunkSize = Math.min(daysRemaining, 7); // Max 7 days per request
+    const chunkStart = new Date(chunkEnd.getTime() - chunkSize * msPerDay);
 
-    const json = await fb("getAdjustments.php", { startDate: s, endDate: e });
-    const resultSet = json.resultSet || [];
+    const startStr = chunkStart.toISOString().split("T")[0];
+    const endStr = chunkEnd.toISOString().split("T")[0];
 
-    for (const adjustment of resultSet) {
-      const lines = adjustment.Lines || [];
-      for (const line of lines) {
-        if (line.partNumber) {
-          all.push({
-            PartNumber: line.partNumber,
-            PartName: line.description || "Unknown",
-            QtyChanged: Number(line.quantityChange || 0),
-            NewOnHand: Number(line.quantityChange || 0),
-            Reason: adjustment.type || "",
-            Date: line.created || adjustment.created || "",
-            Location: "",
-          });
-        }
-      }
+    const json = await fb("getAdjustments.php", { startDate: startStr, endDate: endStr });
+
+    if (json.status === "SUCCESS" && json.Data) {
+      const chunkData = json.Data as FbAdjustment[];
+      allAdjustments.push(...chunkData);
     }
+    // If FAIL, we continue with next chunk (don't throw)
 
-    chunkEnd = new Date(chunkStart.getTime() - msDay);
-    remaining -= size;
+    chunkEnd = new Date(chunkStart.getTime() - msPerDay); // Next chunk starts day before
+    daysRemaining -= chunkSize;
   }
 
-  return all;
+  return allAdjustments;
 }
 
 export async function pingFullbay(): Promise<{ ok: boolean; error?: string }> {
