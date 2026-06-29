@@ -47,6 +47,8 @@ export interface FbAdjustment {
   Reason: string;
   Date: string;
   Location: string;
+  Cost: string;
+  SellingPrice: string;
 }
 
 /**
@@ -104,6 +106,8 @@ export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustm
             Reason: adjustment.type || "",
             Date: line.created || adjustment.created || "",
             Location: "",
+            Cost: line.cost != null ? String(line.cost) : "0",
+            SellingPrice: line.sellingPrice != null ? String(line.sellingPrice) : "0",
           });
         }
       }
