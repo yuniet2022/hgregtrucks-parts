@@ -35,7 +35,7 @@ export const fullbayRouter = createRouter({
     }
   }),
     // DEBUG: Try to find part category from different endpoints
-  debugPart: adminQuery
+  debugPart: publicQuery
     .input(z.object({ partNumber: z.string() }))
     .query(async ({ input }) => {
       const results: any = {};
