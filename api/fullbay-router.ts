@@ -34,6 +34,32 @@ export const fullbayRouter = createRouter({
       return { ok: false, error: e.message };
     }
   }),
+    // DEBUG: Try to find part category from different endpoints
+  debugPart: adminQuery
+    .input(z.object({ partNumber: z.string() }))
+    .query(async ({ input }) => {
+      const results: any = {};
+      
+      // Try getParts.php
+      try {
+        const json = await fb("getParts.php", { partNumber: input.partNumber });
+        results.getParts = { status: json.status, keys: Object.keys(json), data: json.Data?.[0] || json.resultSet?.[0] };
+      } catch (e: any) { results.getParts = { error: e.message }; }
+      
+      // Try getInventory.php  
+      try {
+        const json = await fb("getInventory.php", { partNumber: input.partNumber });
+        results.getInventory = { status: json.status, keys: Object.keys(json), data: json.Data?.[0] || json.resultSet?.[0] };
+      } catch (e: any) { results.getInventory = { error: e.message }; }
+      
+      // Try getPart.php (singular)
+      try {
+        const json = await fb("getPart.php", { partNumber: input.partNumber });
+        results.getPart = { status: json.status, keys: Object.keys(json), data: json.Data || json.resultSet };
+      } catch (e: any) { results.getPart = { error: e.message }; }
+
+      return results;
+    }),
   syncInventory: adminQuery
     .input(z.object({ daysBack: z.number().min(1).max(365).optional() }).optional())
     .mutation(async ({ input }) => {
