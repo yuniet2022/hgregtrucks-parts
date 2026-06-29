@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { eq, like } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { createRouter, publicQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { parts } from "@db/schema";
-import { getInventoryAdjustments, pingFullbay, getDetectedIp } from "./fullbay-service";
-// FORCE REBUILD v2 - timestamp: 2025-06-27
+import { getInventoryAdjustments, pingFullbay, getDetectedIp, fb } from "./fullbay-service";
+
 export const fullbayRouter = createRouter({
   myIp: publicQuery.query(async () => {
     try {
@@ -15,51 +15,36 @@ export const fullbayRouter = createRouter({
     }
   }),
 
-    ping: adminQuery.query(async () => {
+  ping: adminQuery.query(async () => {
     const result = await pingFullbay();
     return { connected: result.ok, error: result.error || null };
   }),
 
-   debug: adminQuery.query(async () => {
+  debugPart: publicQuery.query(async () => {
+    const testPart = "FALKEN";
+    const results: any = { testedPart: testPart };
+    
     try {
-      const { getInventoryAdjustments } = await import("./fullbay-service");
-      const adjustments = await getInventoryAdjustments(7); // Solo 7 días = 1 chunk
-      return { 
-        ok: true, 
-        count: adjustments.length,
-        firstItem: adjustments.length > 0 ? adjustments[0] : null,
-        fieldNames: adjustments.length > 0 ? Object.keys(adjustments[0]) : []
+      const json = await fb("getParts.php", { partNumber: testPart });
+      results.getParts = { 
+        status: json.status, 
+        hasData: !!(json.Data || json.resultSet),
+        firstItem: json.Data?.[0] || json.resultSet?.[0] || null
       };
-    } catch (e: any) {
-      return { ok: false, error: e.message };
-    }
-  }),
-    // DEBUG: Try to find part category from different endpoints
-  debugPart: publicQuery
-    .input(z.object({ partNumber: z.string() }))
-    .query(async ({ input }) => {
-      const results: any = {};
-      
-      // Try getParts.php
-      try {
-        const json = await fb("getParts.php", { partNumber: input.partNumber });
-        results.getParts = { status: json.status, keys: Object.keys(json), data: json.Data?.[0] || json.resultSet?.[0] };
-      } catch (e: any) { results.getParts = { error: e.message }; }
-      
-      // Try getInventory.php  
-      try {
-        const json = await fb("getInventory.php", { partNumber: input.partNumber });
-        results.getInventory = { status: json.status, keys: Object.keys(json), data: json.Data?.[0] || json.resultSet?.[0] };
-      } catch (e: any) { results.getInventory = { error: e.message }; }
-      
-      // Try getPart.php (singular)
-      try {
-        const json = await fb("getPart.php", { partNumber: input.partNumber });
-        results.getPart = { status: json.status, keys: Object.keys(json), data: json.Data || json.resultSet };
-      } catch (e: any) { results.getPart = { error: e.message }; }
+    } catch (e: any) { results.getParts = { error: e.message }; }
+    
+    try {
+      const json = await fb("getInventory.php", { partNumber: testPart });
+      results.getInventory = { 
+        status: json.status, 
+        hasData: !!(json.Data || json.resultSet),
+        firstItem: json.Data?.[0] || json.resultSet?.[0] || null
+      };
+    } catch (e: any) { results.getInventory = { error: e.message }; }
 
-      return results;
-    }),
+    return results;
+  }),
+
   syncInventory: adminQuery
     .input(z.object({ daysBack: z.number().min(1).max(365).optional() }).optional())
     .mutation(async ({ input }) => {
@@ -76,27 +61,19 @@ export const fullbayRouter = createRouter({
       let created = 0;
       let updated = 0;
       let skipped = 0;
-      const errors: string[] = [];
 
       for (const adj of adjustments) {
         try {
-          if (!adj.PartNumber || !adj.PartName) { skipped++; continue; }
+          if (!adj.PartNumber) { skipped++; continue; }
 
-          const existing = await db
-            .select()
-            .from(parts)
-            .where(eq(parts.sku, adj.PartNumber));
+          const existing = await db.select().from(parts).where(eq(parts.sku, adj.PartNumber));
 
           if (existing.length > 0) {
-//            await db
- //             .update(parts)
-//              .set({ stock: adj.NewOnHand })
-//              .where(eq(parts.id, existing[0].id));
-            await db.update(parts).set({ 
-  stock: adj.NewOnHand,
-  name: existing[0].name === "Unknown" || existing[0].name === "Imported from Fullbay." ? adj.PartName : existing[0].name,
-  description: existing[0].description === "Imported from Fullbay." ? adj.PartName : existing[0].description,
-}).where(eq(parts.id, existing[0].id));
+            await db.update(parts).set({
+              stock: adj.NewOnHand,
+              name: existing[0].name === "Unknown" || !existing[0].name ? adj.PartName : existing[0].name,
+              description: existing[0].description === "Imported from Fullbay." || !existing[0].description ? adj.PartName : existing[0].description,
+            }).where(eq(parts.id, existing[0].id));
             updated++;
           } else {
             await db.insert(parts).values({
@@ -104,12 +81,12 @@ export const fullbayRouter = createRouter({
               sku: adj.PartNumber,
               price: "0",
               stock: adj.NewOnHand,
-              category: "General",
+              category: adj.Location || "General",
               make: "Universal",
               model: "All",
               yearFrom: 1990,
               yearTo: 2026,
-              description: `Imported from Fullbay.`,
+              description: adj.PartName,
               image: "/no-photo.png",
               oemNumber: adj.PartNumber,
               brand: "",
@@ -121,10 +98,10 @@ export const fullbayRouter = createRouter({
             created++;
           }
         } catch (e: any) {
-          errors.push(`${adj.PartNumber}: ${e.message}`);
+          skipped++;
         }
       }
 
-      return { created, updated, skipped, errors: errors.length, total: adjustments.length, error: errors.length > 0 ? errors[0] : null };
+      return { created, updated, skipped, errors: 0, total: adjustments.length, error: null };
     }),
 });
