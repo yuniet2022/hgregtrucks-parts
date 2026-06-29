@@ -11,6 +11,12 @@ const API_KEY = () => {
   return key;
 };
 
+/** Margen de ganancia sobre costo. Ej: 1.3 = 30% ganancia, 1.5 = 50%. Default 1.0 (sin margen) */
+const MARGIN = () => {
+  const m = parseFloat(process.env.FULLBAY_MARGIN || "1.0");
+  return isNaN(m) || m <= 0 ? 1.0 : m;
+};
+
 let cachedServerIp: string | null = null;
 
 async function getServerIp(): Promise<string> {
@@ -73,51 +79,82 @@ export async function fb(endpoint: string, params: Record<string, string> = {}):
   }
 }
 
+/**
+ * Acumula ajustes de inventario por partNumber.
+ * Fullbay devuelve quantityChange como delta (cambio), no stock actual.
+ * Sumamos todo el historial para obtener el stock real de cada parte.
+ * Para precio: sellingPrice siempre es 0 en Fullbay, usamos cost.
+ */
 export async function getInventoryAdjustments(daysBack = 365): Promise<FbAdjustment[]> {
-  const allAdjustments: FbAdjustment[] = [];
+  // Mapa para acumular por partNumber: { qtyTotal, cost, name }
+  const partMap = new Map<string, { name: string; qty: number; cost: string; date: string }>();
   const now = new Date();
   const msPerDay = 86400000;
 
-  // Work backwards from today in 7-day chunks
   let chunkEnd = now;
-  const totalDays = daysBack;
-  let daysRemaining = totalDays;
+  let daysRemaining = daysBack;
 
   while (daysRemaining > 0) {
-    const chunkSize = Math.min(daysRemaining, 7); // Max 7 days per request
+    const chunkSize = Math.min(daysRemaining, 7);
     const chunkStart = new Date(chunkEnd.getTime() - chunkSize * msPerDay);
-
     const startStr = chunkStart.toISOString().split("T")[0];
     const endStr = chunkEnd.toISOString().split("T")[0];
 
     const json = await fb("getAdjustments.php", { startDate: startStr, endDate: endStr });
 
-    // Fullbay returns nested structure: resultSet[] → Lines[] → part fields
     const resultSet = json.resultSet || json.Data || [];
     for (const adjustment of resultSet) {
       const lines = adjustment.Lines || [];
       for (const line of lines) {
-        if (line.partNumber) {
-          allAdjustments.push({
-            PartNumber: line.partNumber,
-            PartName: line.description || line.partNumber,
-            QtyChanged: Number(line.quantityChange || 0),
-            NewOnHand: Number(line.quantityChange || 0),
-            Reason: adjustment.type || "",
-            Date: line.created || adjustment.created || "",
-            Location: "",
-            Cost: line.cost != null ? String(line.cost) : "0",
-            SellingPrice: line.sellingPrice != null ? String(line.sellingPrice) : "0",
+        if (!line.partNumber) continue;
+
+        const pn = line.partNumber;
+        const change = Number(line.quantityChange || 0);
+        const existing = partMap.get(pn);
+
+        if (existing) {
+          existing.qty += change;
+          // Solo actualizamos cost si el nuevo es mayor que 0 y mejor
+          const newCost = Number(line.cost || 0);
+          if (newCost > 0) {
+            existing.cost = String(newCost);
+          }
+        } else {
+          const costVal = Number(line.cost || 0);
+          partMap.set(pn, {
+            name: line.description || pn,
+            qty: change,
+            cost: costVal > 0 ? String(costVal) : "0",
+            date: line.created || adjustment.created || "",
           });
         }
       }
     }
 
-    chunkEnd = new Date(chunkStart.getTime() - msPerDay); // Next chunk starts day before
+    chunkEnd = new Date(chunkStart.getTime() - msPerDay);
     daysRemaining -= chunkSize;
   }
 
-  return allAdjustments;
+  // Convertir el mapa a array de FbAdjustment con stock real acumulado
+  const result: FbAdjustment[] = [];
+  for (const [pn, data] of partMap) {
+    // Ignorar partes con stock negativo o cero (no las vendemos)
+    if (data.qty <= 0) continue;
+
+    result.push({
+      PartNumber: pn,
+      PartName: data.name,
+      QtyChanged: data.qty, // Stock total acumulado
+      NewOnHand: data.qty,
+      Reason: "Accumulated",
+      Date: data.date,
+      Location: "",
+      Cost: data.cost,
+      SellingPrice: "0", // Fullbay no tiene precio de venta
+    });
+  }
+
+  return result;
 }
 
 export async function pingFullbay(): Promise<{ ok: boolean; error?: string }> {
@@ -132,4 +169,17 @@ export async function pingFullbay(): Promise<{ ok: boolean; error?: string }> {
 
 export async function getDetectedIp(): Promise<string> {
   return getServerIp();
+}
+
+/** Calcula precio de venta aplicando margen sobre costo. Ej: costo $100 + margen 1.3 = $130 */
+export function getSellingPrice(cost: string): string {
+  const c = parseFloat(cost || "0");
+  if (c <= 0) return "0";
+  const price = c * MARGIN();
+  return price.toFixed(2);
+}
+
+/** Devuelve el margen configurado actualmente */
+export function getMargin(): number {
+  return MARGIN();
 }
