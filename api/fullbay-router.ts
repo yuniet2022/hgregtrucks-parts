@@ -39,14 +39,25 @@ export const fullbayRouter = createRouter({
       "getAdjustments.php",
     ];
 
+    // Use last 7 days for adjustments (recent data)
+    const today = new Date();
+    const weekAgo = new Date(today.getTime() - 7 * 86400000);
+    const startStr = weekAgo.toISOString().split("T")[0];
+    const endStr = today.toISOString().split("T")[0];
+
     for (const endpoint of endpoints) {
       try {
         const json = await fb(endpoint, endpoint === "getAdjustments.php"
-          ? { startDate: "2024-01-01", endDate: "2024-01-07" }
+          ? { startDate: startStr, endDate: endStr }
           : { partNumber: testPart });
         results.endpoints[endpoint] = {
           status: json.status || "unknown",
           keys: Object.keys(json),
+          hasResultSet: !!json.resultSet,
+          resultSetLength: json.resultSet?.length || 0,
+          firstResultKeys: json.resultSet?.[0] ? Object.keys(json.resultSet[0]) : null,
+          firstLineKeys: json.resultSet?.[0]?.Lines?.[0] ? Object.keys(json.resultSet[0].Lines[0]) : null,
+          firstLineSample: json.resultSet?.[0]?.Lines?.[0] || null,
           raw: json, // FULL raw JSON response
         };
       } catch (e: any) {
@@ -83,6 +94,7 @@ export const fullbayRouter = createRouter({
           if (existing.length > 0) {
             await db.update(parts).set({
               stock: adj.NewOnHand,
+              price: existing[0].price === "0" || !existing[0].price ? adj.SellingPrice : existing[0].price,
               name: existing[0].name === "Unknown" || !existing[0].name ? adj.PartName : existing[0].name,
               description: existing[0].description === "Imported from Fullbay." || !existing[0].description ? adj.PartName : existing[0].description,
             }).where(eq(parts.id, existing[0].id));
@@ -91,7 +103,7 @@ export const fullbayRouter = createRouter({
             await db.insert(parts).values({
               name: adj.PartName,
               sku: adj.PartNumber,
-              price: "0",
+              price: adj.SellingPrice || "0",
               stock: adj.NewOnHand,
               category: categorizePart(adj.PartName) || "General",
               make: "Universal",
