@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { createRouter, publicQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { parts } from "@db/schema";
-import { getInventoryAdjustments, pingFullbay, getDetectedIp, fb } from "./fullbay-service";
+import { getInventoryAdjustments, pingFullbay, getDetectedIp, fb, getSellingPrice, getMargin } from "./fullbay-service";
 import { categorizePart } from "./part-categorizer";
 
 export const fullbayRouter = createRouter({
@@ -18,52 +18,66 @@ export const fullbayRouter = createRouter({
 
   ping: adminQuery.query(async () => {
     const result = await pingFullbay();
-    return { connected: result.ok, error: result.error || null };
+    return { connected: result.ok, error: result.error || null, margin: getMargin() };
   }),
 
   debugPart: publicQuery.query(async () => {
     const testPart = "FALKEN";
-    const results: any = { testedPart: testPart, endpoints: {} };
+    const results: any = { testedPart: testPart };
 
-    // List of endpoints to try
-    const endpoints = [
-      "getParts.php",
-      "getInventory.php",
-      "getPartCatalog.php",
-      "getItems.php",
-      "getInventoryItems.php",
-      "getProducts.php",
-      "getPartList.php",
-      "getStock.php",
-      "getPart.php",
-      "getAdjustments.php",
-    ];
-
-    // Use last 7 days for adjustments (recent data)
+    // Fechas: ultimos 7 dias
     const today = new Date();
     const weekAgo = new Date(today.getTime() - 7 * 86400000);
     const startStr = weekAgo.toISOString().split("T")[0];
     const endStr = today.toISOString().split("T")[0];
 
-    for (const endpoint of endpoints) {
-      try {
-        const json = await fb(endpoint, endpoint === "getAdjustments.php"
-          ? { startDate: startStr, endDate: endStr }
-          : { partNumber: testPart });
-        results.endpoints[endpoint] = {
-          status: json.status || "unknown",
-          keys: Object.keys(json),
-          hasResultSet: !!json.resultSet,
-          resultSetLength: json.resultSet?.length || 0,
-          firstResultKeys: json.resultSet?.[0] ? Object.keys(json.resultSet[0]) : null,
-          firstLineKeys: json.resultSet?.[0]?.Lines?.[0] ? Object.keys(json.resultSet[0].Lines[0]) : null,
-          firstLineSample: json.resultSet?.[0]?.Lines?.[0] || null,
-          raw: json, // FULL raw JSON response
-        };
-      } catch (e: any) {
-        results.endpoints[endpoint] = { error: e.message };
-      }
-    }
+    // ========== getAdjustments.php ==========
+    try {
+      const adj = await fb("getAdjustments.php", { startDate: startStr, endDate: endStr });
+      results.getAdjustments = {
+        status: adj.status || "unknown",
+        keys: Object.keys(adj),
+        resultSetLength: adj.resultSet?.length || 0,
+        // Primera parte encontrada con ese partNumber, o la primera en general
+        matchingLine: (() => {
+          if (!adj.resultSet) return null;
+          for (const r of adj.resultSet) {
+            for (const line of r.Lines || []) {
+              if (line.partNumber === testPart) return line;
+            }
+          }
+          // Si no hay match, devolver la primera linea
+          return adj.resultSet[0]?.Lines?.[0] || null;
+        })(),
+        raw: adj,
+      };
+    } catch (e: any) { results.getAdjustments = { error: e.message }; }
+
+    // ========== getCounterSales.php ==========
+    try {
+      const cs = await fb("getCounterSales.php", { startDate: startStr, endDate: endStr });
+      results.getCounterSales = {
+        status: cs.status || "unknown",
+        keys: Object.keys(cs),
+        resultSetLength: cs.resultSet?.length || 0,
+        // Primera parte encontrada con ese partNumber, o la primera en general
+        matchingLine: (() => {
+          if (!cs.resultSet) return null;
+          for (const r of cs.resultSet) {
+            for (const line of r.Lines || r.parts || []) {
+              if (line.partNumber === testPart) return line;
+            }
+          }
+          // Buscar en otras estructuras posibles
+          const first = cs.resultSet[0];
+          if (first) {
+            return first.Lines?.[0] || first.parts?.[0] || first.items?.[0] || first || null;
+          }
+          return null;
+        })(),
+        raw: cs,
+      };
+    } catch (e: any) { results.getCounterSales = { error: e.message }; }
 
     return results;
   }),
@@ -94,7 +108,7 @@ export const fullbayRouter = createRouter({
           if (existing.length > 0) {
             await db.update(parts).set({
               stock: adj.NewOnHand,
-              price: existing[0].price === "0" || !existing[0].price ? adj.SellingPrice : existing[0].price,
+              price: existing[0].price === "0" || !existing[0].price ? getSellingPrice(adj.Cost) : existing[0].price,
               name: existing[0].name === "Unknown" || !existing[0].name ? adj.PartName : existing[0].name,
               description: existing[0].description === "Imported from Fullbay." || !existing[0].description ? adj.PartName : existing[0].description,
             }).where(eq(parts.id, existing[0].id));
@@ -103,7 +117,7 @@ export const fullbayRouter = createRouter({
             await db.insert(parts).values({
               name: adj.PartName,
               sku: adj.PartNumber,
-              price: adj.SellingPrice || "0",
+              price: getSellingPrice(adj.Cost),
               stock: adj.NewOnHand,
               category: categorizePart(adj.PartName) || "General",
               make: "Universal",
