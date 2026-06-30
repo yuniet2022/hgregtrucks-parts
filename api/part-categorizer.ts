@@ -1,7 +1,7 @@
 /**
  * Keyword-based auto-categorization for truck parts.
  * Parses part names/descriptions to infer the most appropriate category.
- * Categories match those used in the HGreg Trucks Parts catalog.
+ * Categories match those used in the HGreg Trucks Parts catalog x1.
  */
 
 export type PartCategory =
