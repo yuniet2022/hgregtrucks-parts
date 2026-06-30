@@ -50,7 +50,18 @@ export default function ShopPage() {
   const hasYmmFilter = yearFromFinder && makeFromFinder;
   const hasVehicleFilter = hasYmmFilter || vinFromFinder;
 
-  const filtered = parts.filter((p) => {
+  // Hide parts with stock <= 0 and parts marked as test/fake/dummy
+  const availableParts = parts.filter((p) => {
+    const hasStock = p.stock > 0;
+    const notTest = !p.name.toLowerCase().includes('fake') &&
+                    !p.name.toLowerCase().includes('test') &&
+                    !p.sku.toLowerCase().includes('fake') &&
+                    !p.sku.toLowerCase().includes('test') &&
+                    !p.name.toLowerCase().includes('dummy');
+    return hasStock && notTest;
+  });
+
+  const filtered = availableParts.filter((p) => {
     const q = search.toLowerCase();
     const matchSearch = !q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q);
     const matchCat = !catFilter || p.category === catFilter;
