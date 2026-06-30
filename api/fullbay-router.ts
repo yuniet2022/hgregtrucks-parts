@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { createRouter, publicQuery, adminQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { parts } from "@db/schema";
-import { getInventoryAdjustments, pingFullbay, getDetectedIp, fb, getSellingPrice, getMargin } from "./fullbay-service";
+import { getInventoryAdjustments, pingFullbay, getDetectedIp, fb, getSellingPrice, getMarginForCost } from "./fullbay-service";
 import { categorizePart } from "./part-categorizer";
 
 export const fullbayRouter = createRouter({
@@ -18,7 +18,7 @@ export const fullbayRouter = createRouter({
 
   ping: adminQuery.query(async () => {
     const result = await pingFullbay();
-    return { connected: result.ok, error: result.error || null, margin: getMargin() };
+    return { connected: result.ok, error: result.error || null, marginRules: { low: "1.5 (<$10)", high: "1.3 (>=$10)" } };
   }),
 
   debugPart: publicQuery.query(async () => {
