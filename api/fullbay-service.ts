@@ -171,15 +171,24 @@ export async function getDetectedIp(): Promise<string> {
   return getServerIp();
 }
 
-/** Calcula precio de venta aplicando margen sobre costo. Ej: costo $100 + margen 1.3 = $130 */
+/**
+ * Calcula precio de venta con margen inteligente segun el costo:
+ * - Costo < $10  → margen 1.5 (50% ganancia)
+ * - Costo >= $10 → margen 1.3 (30% ganancia)
+ * - Costo <= 0   → precio $0
+ * 
+ * Todo es editable despues desde el panel de admin.
+ */
 export function getSellingPrice(cost: string): string {
   const c = parseFloat(cost || "0");
   if (c <= 0) return "0";
-  const price = c * MARGIN();
-  return price.toFixed(2);
+  const margin = c < 10 ? 1.5 : 1.3;
+  return (c * margin).toFixed(2);
 }
 
-/** Devuelve el margen configurado actualmente */
-export function getMargin(): number {
-  return MARGIN();
+/** Devuelve el margen que se aplicaria para un costo dado */
+export function getMarginForCost(cost: string): number {
+  const c = parseFloat(cost || "0");
+  if (c <= 0) return 0;
+  return c < 10 ? 1.5 : 1.3;
 }
