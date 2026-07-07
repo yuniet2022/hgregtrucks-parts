@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import {
@@ -14,20 +15,22 @@ import {
 
 gsap.registerPlugin(ScrollTrigger);
 
+// Map display names to URL category parameter
 const categories = [
-  { name: 'Engine Components', icon: Cog },
-  { name: 'Brake Systems', icon: CircleDot },
-  { name: 'Suspension', icon: Waves },
-  { name: 'Electrical', icon: Zap },
-  { name: 'Cooling Systems', icon: Thermometer },
-  { name: 'Transmission', icon: GitBranch },
-  { name: 'Exhaust & Emissions', icon: Wind },
-  { name: 'Cab & Body', icon: Truck },
+  { name: 'Engine Components', icon: Cog, filter: 'Engine' },
+  { name: 'Brake Systems', icon: CircleDot, filter: 'Brake' },
+  { name: 'Suspension', icon: Waves, filter: 'Suspension' },
+  { name: 'Electrical', icon: Zap, filter: 'Electrical' },
+  { name: 'Cooling Systems', icon: Thermometer, filter: 'Cooling' },
+  { name: 'Transmission', icon: GitBranch, filter: 'Transmission' },
+  { name: 'Exhaust & Emissions', icon: Wind, filter: 'Exhaust' },
+  { name: 'Cab & Body', icon: Truck, filter: 'Body' },
 ];
 
 export default function CategoriesSection() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -65,6 +68,10 @@ export default function CategoriesSection() {
     return () => ctx.revert();
   }, []);
 
+  const handleCategoryClick = (filter: string) => {
+    navigate(`/shop?category=${encodeURIComponent(filter)}`);
+  };
+
   return (
     <section ref={sectionRef} className="w-full py-24 md:py-32 bg-obsidian">
       <div className="max-w-[1440px] mx-auto px-6 md:px-8">
@@ -84,9 +91,10 @@ export default function CategoriesSection() {
           {categories.map((cat) => {
             const Icon = cat.icon;
             return (
-              <div
+              <button
                 key={cat.name}
-                className="cat-card aspect-square bg-ink rounded-xl border border-white/[0.06] flex flex-col items-center justify-center gap-4 cursor-pointer group hover:border-amber/30 transition-all duration-400"
+                onClick={() => handleCategoryClick(cat.filter)}
+                className="cat-card aspect-square bg-ink rounded-xl border border-white/[0.06] flex flex-col items-center justify-center gap-4 cursor-pointer group hover:border-amber/30 transition-all duration-400 text-left"
               >
                 <Icon
                   size={48}
@@ -96,7 +104,7 @@ export default function CategoriesSection() {
                 <h3 className="text-lg font-medium text-chrome text-center px-4">
                   {cat.name}
                 </h3>
-              </div>
+              </button>
             );
           })}
         </div>
