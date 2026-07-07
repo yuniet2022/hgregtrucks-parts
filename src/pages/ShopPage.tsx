@@ -26,6 +26,7 @@ import {
   Fan,
   LayoutGrid,
   Grid3X3,
+  Wrench,
   type LucideProps,
 } from 'lucide-react';
 
@@ -33,22 +34,27 @@ gsap.registerPlugin(ScrollTrigger);
 
 const ALL_MAKES = ['Kenworth', 'Peterbilt', 'Freightliner', 'Volvo', 'Mack', 'International', 'Western Star', 'Isuzu'];
 
-// Category config: name, icon, color accent
-const CATEGORY_CONFIG: { name: string; icon: ComponentType<LucideProps>; color: string }[] = [
-  { name: 'Engine', icon: Settings, color: '#D4A843' },       // amber
-  { name: 'Brake', icon: AlertOctagon, color: '#EF4444' },    // red
-  { name: 'Suspension', icon: MoveVertical, color: '#8B5CF6' }, // purple
-  { name: 'Electrical', icon: Zap, color: '#F59E0B' },        // yellow
-  { name: 'Cooling', icon: Droplets, color: '#06B6D4' },      // cyan
-  { name: 'Transmission', icon: Cog, color: '#6366F1' },      // indigo
-  { name: 'Exhaust', icon: Wind, color: '#9CA3AF' },          // gray
-  { name: 'Emissions', icon: Cloud, color: '#10B981' },       // emerald
-  { name: 'Body', icon: Shield, color: '#EC4899' },           // pink
-  { name: 'Lighting', icon: Lightbulb, color: '#FCD34D' },    // amber-light
-  { name: 'Air System', icon: Fan, color: '#3B82F6' },        // blue
-  { name: 'Chassis', icon: Grid3X3, color: '#6B7280' },      // gray-dark
-  { name: 'Tires', icon: LayoutGrid, color: '#F97316' },      // orange
-];
+// Icon + color lookup for known categories — unknown ones get a default
+const ICON_MAP: Record<string, { icon: ComponentType<LucideProps>; color: string }> = {
+  Engine: { icon: Settings, color: '#D4A843' },
+  Brake: { icon: AlertOctagon, color: '#EF4444' },
+  Suspension: { icon: MoveVertical, color: '#8B5CF6' },
+  Electrical: { icon: Zap, color: '#F59E0B' },
+  Cooling: { icon: Droplets, color: '#06B6D4' },
+  Transmission: { icon: Cog, color: '#6366F1' },
+  Exhaust: { icon: Wind, color: '#9CA3AF' },
+  Emissions: { icon: Cloud, color: '#10B981' },
+  Body: { icon: Shield, color: '#EC4899' },
+  Lighting: { icon: Lightbulb, color: '#FCD34D' },
+  'Air System': { icon: Fan, color: '#3B82F6' },
+  Chassis: { icon: Grid3X3, color: '#6B7280' },
+  Tires: { icon: LayoutGrid, color: '#F97316' },
+  General: { icon: Wrench, color: '#D4A843' },
+};
+
+function getCatConfig(name: string) {
+  return ICON_MAP[name] || { icon: Wrench, color: '#D4A843' };
+}
 
 export default function ShopPage() {
   const navigate = useNavigate();
@@ -102,14 +108,16 @@ export default function ShopPage() {
     return matchSearch && matchCat && matchMake && matchYear && matchModel;
   });
 
-  // Count parts per category
+  // Build dynamic category list from actual parts (only categories with >= 1 part)
   const categoryCounts: Record<string, number> = {};
   for (const p of availableParts) {
     categoryCounts[p.category] = (categoryCounts[p.category] || 0) + 1;
   }
+  const dynamicCategories = Object.entries(categoryCounts)
+    .filter(([, count]) => count > 0)
+    .sort(([a], [b]) => a.localeCompare(b));
 
-  // Active category config
-  const activeCatConfig = CATEGORY_CONFIG.find((c) => c.name === catFilter);
+  const activeCatConfig = getCatConfig(catFilter);
 
   const handleCategoryClick = (name: string) => {
     setCatFilter(name);
@@ -247,24 +255,23 @@ export default function ShopPage() {
                 <p className="text-xs text-steel mt-1">{availableParts.length} items</p>
               </button>
 
-              {/* Category cards */}
-              {CATEGORY_CONFIG.map((cat) => {
-                const count = categoryCounts[cat.name] || 0;
-                if (count === 0) return null; // hide empty categories
-                const Icon = cat.icon;
+              {/* Dynamic category cards from actual parts */}
+              {dynamicCategories.map(([catName, count]) => {
+                const cfg = getCatConfig(catName);
+                const Icon = cfg.icon;
                 return (
                   <button
-                    key={cat.name}
-                    onClick={() => handleCategoryClick(cat.name)}
+                    key={catName}
+                    onClick={() => handleCategoryClick(catName)}
                     className="cat-card bg-ink rounded-xl border border-white/[0.06] p-6 text-center hover:border-white/20 hover:bg-ink/80 transition-all duration-300 group"
                   >
                     <div
                       className="w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center transition-colors group-hover:scale-110 duration-300"
-                      style={{ backgroundColor: `${cat.color}15` }}
+                      style={{ backgroundColor: `${cfg.color}15` }}
                     >
-                      <Icon size={28} style={{ color: cat.color }} />
+                      <Icon size={28} style={{ color: cfg.color }} />
                     </div>
-                    <p className="text-sm font-medium text-chrome uppercase tracking-wide">{cat.name}</p>
+                    <p className="text-sm font-medium text-chrome uppercase tracking-wide">{catName}</p>
                     <p className="text-xs text-steel mt-1">{count} parts</p>
                   </button>
                 );
@@ -307,19 +314,15 @@ export default function ShopPage() {
         </div>
 
         <h1 className="text-3xl md:text-4xl font-light text-chrome mb-2 tracking-tight">
-          {activeCatConfig ? (
-            <span className="flex items-center gap-3">
-              <span
-                className="w-10 h-10 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: `${activeCatConfig.color}15` }}
-              >
-                <activeCatConfig.icon size={20} style={{ color: activeCatConfig.color }} />
-              </span>
-              {catFilter || 'All Parts'}
+          <span className="flex items-center gap-3">
+            <span
+              className="w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: `${activeCatConfig.color}15` }}
+            >
+              <activeCatConfig.icon size={20} style={{ color: activeCatConfig.color }} />
             </span>
-          ) : (
-            'All Parts'
-          )}
+            {catFilter || 'All Parts'}
+          </span>
         </h1>
 
         {/* Vehicle badge */}
@@ -377,8 +380,8 @@ export default function ShopPage() {
                 className="bg-ink border border-white/[0.12] rounded-lg pl-9 pr-8 py-2.5 text-sm text-chrome appearance-none cursor-pointer focus:border-amber focus:outline-none"
               >
                 <option value="">All Categories</option>
-                {CATEGORY_CONFIG.map((c) => (
-                  <option key={c.name} value={c.name}>{c.name}</option>
+                {dynamicCategories.map(([name]) => (
+                  <option key={name} value={name}>{name}</option>
                 ))}
               </select>
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-steel pointer-events-none" />
