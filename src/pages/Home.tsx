@@ -2,6 +2,7 @@ import Navigation from '../sections/Navigation';
 import HeroSection from '../sections/HeroSection';
 import PartsFinder from '../sections/PartsFinder';
 import BrandTicker from '../sections/BrandTicker';
+import SnapFinanceSection from '../sections/SnapFinanceSection';
 import FeaturedProducts from '../sections/FeaturedProducts';
 import CategoriesSection from '../sections/CategoriesSection';
 import WhySection from '../sections/WhySection';
@@ -14,6 +15,7 @@ export default function Home() {
       <HeroSection />
       <PartsFinder />
       <BrandTicker />
+      <SnapFinanceSection />
       <FeaturedProducts />
       <CategoriesSection />
       <WhySection />
