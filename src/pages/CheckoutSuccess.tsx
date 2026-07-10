@@ -11,7 +11,6 @@ export default function CheckoutSuccess() {
   const orderId = searchParams.get('order') || '';
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [amount, setAmount] = useState<number | null>(null);
-
   const verifyQuery = trpc.payments.verifyStripeSession.useQuery(
     { sessionId },
     { enabled: !!sessionId, retry: 2 }
