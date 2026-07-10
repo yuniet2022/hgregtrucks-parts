@@ -21,6 +21,7 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const createOrder = trpc.payments.createOrder.useMutation();
+  const createStripeSession = trpc.payments.createStripeCheckoutSession.useMutation();
 
   const tax = totalPrice * 0.07;
   const shipping = totalPrice > 200 ? 0 : 15;
@@ -39,6 +40,26 @@ export default function CheckoutPage() {
     if (!validate()) return;
     setSubmitting(true);
     try {
+      // For Stripe: redirect to Stripe Checkout
+      if (method === 'stripe') {
+        const orderId = `HGP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const session = await createStripeSession.mutateAsync({
+          items: items.map(i => ({
+            name: i.name,
+            price: i.price,
+            quantity: i.quantity,
+            image: i.image,
+          })),
+          customerEmail: email,
+          orderId,
+        });
+        if (session.url) {
+          window.location.href = session.url; // Redirect to Stripe
+          return;
+        }
+      }
+
+      // For other methods: create order directly
       const res = await createOrder.mutateAsync({
         items: items.map(i => ({
           partId: i.id,
@@ -163,7 +184,8 @@ export default function CheckoutPage() {
               {/* Method details */}
               {method === 'stripe' && (
                 <div className="bg-obsidian rounded-lg p-4 border border-white/[0.06]">
-                  <p className="text-sm text-steel">You will be redirected to our secure payment processor to complete your card payment.</p>
+                  <p className="text-sm text-steel mb-2">You will be redirected to <strong className="text-chrome">Stripe Checkout</strong> to complete your card payment securely.</p>
+                  <p className="text-xs text-amber">Visa, Mastercard, Amex, Discover accepted</p>
                 </div>
               )}
               {method === 'paypal' && (
