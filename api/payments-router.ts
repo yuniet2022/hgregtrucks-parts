@@ -201,6 +201,83 @@ const createOrder = publicQuery.input(
   }
 });
 
+// Stripe Checkout Session — redirects user to Stripe to pay
+const createStripeCheckoutSession = publicQuery.input(
+  z.object({
+    items: z.array(z.object({
+      name: z.string(),
+      price: z.number().min(0.01),
+      quantity: z.number().min(1),
+      image: z.string().optional(),
+    })),
+    customerEmail: z.string().email().optional(),
+    orderId: z.string(),
+  })
+).mutation(async ({ input }) => {
+  try {
+    const { default: Stripe } = await import("stripe");
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeSecretKey) {
+      throw new Error("STRIPE_SECRET_KEY not configured");
+    }
+    const stripe = new Stripe(stripeSecretKey, {
+      apiVersion: "2024-12-18.acacia",
+    });
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: input.items.map((item) => ({
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: item.name,
+            images: item.image ? [item.image] : undefined,
+          },
+          unit_amount: Math.round(item.price * 100), // cents
+        },
+        quantity: item.quantity,
+      })),
+      mode: "payment",
+      success_url: `${process.env.FRONTEND_URL || "https://hgregtrucksparts.com"}/#/checkout/success?order=${input.orderId}&session={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL || "https://hgregtrucksparts.com"}/#/checkout?canceled=true`,
+      customer_email: input.customerEmail,
+      metadata: {
+        orderId: input.orderId,
+        source: "hgreg-trucks-parts",
+      },
+    });
+
+    return { url: session.url, sessionId: session.id };
+  } catch (error: any) {
+    console.error("[Stripe] Error creating checkout session:", error.message);
+    throw new Error("Failed to create Stripe checkout: " + error.message);
+  }
+});
+
+// Verify Stripe checkout session
+const verifyStripeSession = publicQuery.input(
+  z.object({ sessionId: z.string() })
+).query(async ({ input }) => {
+  try {
+    const { default: Stripe } = await import("stripe");
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeSecretKey) throw new Error("STRIPE_SECRET_KEY not configured");
+    const stripe = new Stripe(stripeSecretKey, {
+      apiVersion: "2024-12-18.acacia",
+    });
+
+    const session = await stripe.checkout.sessions.retrieve(input.sessionId);
+    return {
+      status: session.payment_status, // "paid", "unpaid", "no_payment_required"
+      amountTotal: session.amount_total,
+      customerEmail: session.customer_email,
+      orderId: session.metadata?.orderId,
+    };
+  } catch (error: any) {
+    throw new Error("Failed to verify session: " + error.message);
+  }
+});
+
 // Get public config (publishable keys, client IDs)
 const getPublicConfig = publicQuery.query(() => {
   return {
@@ -212,6 +289,8 @@ const getPublicConfig = publicQuery.query(() => {
 export const paymentsRouter = createRouter({
   getPublicConfig,
   createPaymentIntent,
+  createStripeCheckoutSession,
+  verifyStripeSession,
   createPayPalOrder,
   capturePayPalOrder,
   createOrder,
