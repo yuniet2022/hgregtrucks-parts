@@ -12,7 +12,6 @@ import CheckoutSuccess from './pages/CheckoutSuccess';
 import Admin from './pages/Admin';
 import Login from "./pages/Login"
 import NotFound from "./pages/NotFound"
-
 export default function App() {
   return (
     <CartProvider>
