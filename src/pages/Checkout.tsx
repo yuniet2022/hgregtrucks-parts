@@ -19,10 +19,8 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{orderId: string; instructions: string} | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-
   const createOrder = trpc.payments.createOrder.useMutation();
   const createStripeSession = trpc.payments.createStripeCheckoutSession.useMutation();
-
   const tax = totalPrice * 0.07;
   const shipping = totalPrice > 200 ? 0 : 15;
   const grandTotal = totalPrice + tax + shipping;
