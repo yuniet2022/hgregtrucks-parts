@@ -212,6 +212,7 @@ const createStripeCheckoutSession = publicQuery.input(
     })),
     customerEmail: z.string().email().optional(),
     orderId: z.string(),
+    origin: z.string().url().default("https://hgregtrucksparts.com"),
   })
 ).mutation(async ({ input }) => {
   try {
@@ -238,8 +239,13 @@ const createStripeCheckoutSession = publicQuery.input(
         quantity: item.quantity,
       })),
       mode: "payment",
-      success_url: `${process.env.FRONTEND_URL || "https://hgregtrucksparts.com"}/#/checkout/success?order=${input.orderId}&session={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL || "https://hgregtrucksparts.com"}/#/checkout?canceled=true`,
+      success_url: `${input.origin}/?order=${input.orderId}&session={CHECKOUT_SESSION_ID}#/checkout/success`,
+      cancel_url: `${input.origin}/?canceled=true#/checkout`,
+      automatic_tax: { enabled: true },
+      // ANTI-FRAUD: Require 3D Secure for all cards
+      payment_intent_data: {
+        request_three_d_secure: "any",
+      },
       customer_email: input.customerEmail,
       metadata: {
         orderId: input.orderId,
