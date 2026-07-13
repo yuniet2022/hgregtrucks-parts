@@ -19,7 +19,6 @@ export const appRouter = createRouter({
   fullbay: fullbayRouter,
   orders: ordersRouter,
 });
-
 export type AppRouter = typeof appRouter;
 
 
