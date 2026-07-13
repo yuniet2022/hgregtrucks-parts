@@ -265,6 +265,62 @@ if (env.isProduction) {
         `);
         console.log("[DB MIGRATION] Created part_variants table");
       } catch (e: any) { console.log("[DB MIGRATION] part_variants table exists or error:", e.message); }
+      // Create orders table
+      try {
+        await conn.execute(`
+          CREATE TABLE IF NOT EXISTS orders (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            orderNumber VARCHAR(50) NOT NULL UNIQUE,
+            customerName VARCHAR(255) NOT NULL,
+            customerEmail VARCHAR(320) NOT NULL,
+            customerPhone VARCHAR(50),
+            shippingAddress TEXT,
+            billingAddress TEXT,
+            subtotal VARCHAR(20) NOT NULL,
+            tax VARCHAR(20) NOT NULL DEFAULT '0',
+            shipping VARCHAR(20) NOT NULL DEFAULT '0',
+            total VARCHAR(20) NOT NULL,
+            paymentMethod ENUM('stripe','paypal','bank_transfer','cash_on_pickup') NOT NULL,
+            paymentStatus ENUM('pending','paid','failed','refunded','disputed') NOT NULL DEFAULT 'pending',
+            stripeSessionId VARCHAR(100),
+            stripePaymentIntentId VARCHAR(100),
+            paypalOrderId VARCHAR(100),
+            fulfillmentStatus ENUM('pending','picked','packed','shipped','delivered','ready_for_pickup','picked_up') NOT NULL DEFAULT 'pending',
+            deliveryType ENUM('pickup','delivery','shipping') NOT NULL DEFAULT 'pickup',
+            trackingNumber VARCHAR(100),
+            notes TEXT,
+            fraudScore INT UNSIGNED DEFAULT 0,
+            fraudFlags TEXT,
+            ipAddress VARCHAR(50),
+            cardCountry VARCHAR(10),
+            threeDSecure ENUM('not_attempted','attempted','successful','failed') DEFAULT 'not_attempted',
+            adminNotes TEXT,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )
+        `);
+        console.log("[DB MIGRATION] Created orders table");
+      } catch (e: any) { console.log("[DB MIGRATION] orders table exists or error:", e.message); }
+
+      // Create order_items table
+      try {
+        await conn.execute(`
+          CREATE TABLE IF NOT EXISTS order_items (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            orderId INT UNSIGNED NOT NULL,
+            partId INT UNSIGNED NOT NULL,
+            partName VARCHAR(255) NOT NULL,
+            partSku VARCHAR(100) NOT NULL,
+            partImage VARCHAR(500),
+            quantity INT UNSIGNED NOT NULL,
+            unitPrice VARCHAR(20) NOT NULL,
+            totalPrice VARCHAR(20) NOT NULL,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        console.log("[DB MIGRATION] Created order_items table");
+      } catch (e: any) { console.log("[DB MIGRATION] order_items table exists or error:", e.message); }
+
       await conn.end();
       console.log("[DB MIGRATION] All migrations completed");
     }
