@@ -19,8 +19,10 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{orderId: string; instructions: string} | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const createOrder = trpc.payments.createOrder.useMutation();
+
+  const createOrder = trpc.orders.create.useMutation();
   const createStripeSession = trpc.payments.createStripeCheckoutSession.useMutation();
+
   const tax = totalPrice * 0.07;
   const shipping = totalPrice > 200 ? 0 : 15;
   const grandTotal = totalPrice + tax + shipping;
@@ -38,9 +40,39 @@ export default function CheckoutPage() {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      // For Stripe: redirect to Stripe Checkout
+      // For Stripe: save order first, then redirect to Stripe Checkout
       if (method === 'stripe') {
-        const orderId = `HGP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const orderNumber = `HGP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+        // Save order to database first
+        const savedOrder = await createOrder.mutateAsync({
+          orderNumber,
+          customerName: name,
+          customerEmail: email,
+          customerPhone: phone,
+          shippingAddress: address,
+          billingAddress: address,
+          subtotal: totalPrice.toFixed(2),
+          tax: tax.toFixed(2),
+          shipping: shipping.toFixed(2),
+          total: grandTotal.toFixed(2),
+          paymentMethod: 'stripe',
+          paymentStatus: 'pending',
+          deliveryType: address ? 'delivery' : 'pickup',
+          notes,
+          ipAddress: 'client', // server will capture real IP
+          items: items.map(i => ({
+            partId: i.id,
+            partName: i.name,
+            partSku: i.sku,
+            partImage: i.image,
+            quantity: i.quantity,
+            unitPrice: i.price.toFixed(2),
+            totalPrice: (i.price * i.quantity).toFixed(2),
+          })),
+        });
+
+        // Now create Stripe Checkout Session
         const session = await createStripeSession.mutateAsync({
           items: items.map(i => ({
             name: i.name,
@@ -49,10 +81,13 @@ export default function CheckoutPage() {
             image: i.image,
           })),
           customerEmail: email,
-          orderId,
+          orderId: orderNumber,
+          origin: window.location.origin,
         });
+
+        // Update order with stripe session ID
         if (session.url) {
-          window.location.href = session.url; // Redirect to Stripe
+          window.location.href = session.url;
           return;
         }
       }
