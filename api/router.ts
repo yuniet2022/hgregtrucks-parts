@@ -5,6 +5,7 @@ import { variantsRouter } from "./variants-router";
 import { messagesRouter } from "./messages-router";
 import { paymentsRouter } from "./payments-router";
 import { fullbayRouter } from "./fullbay-router";
+import { ordersRouter } from "./orders-router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -16,7 +17,9 @@ export const appRouter = createRouter({
   messages: messagesRouter,
   payments: paymentsRouter,
   fullbay: fullbayRouter,
+  orders: ordersRouter,
 });
 
 export type AppRouter = typeof appRouter;
+
 
