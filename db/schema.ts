@@ -104,6 +104,58 @@ export const messages = mysqlTable("messages", {
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = typeof messages.$inferInsert;
 
+// ===== ORDERS (Purchase History) =====
+export const orders = mysqlTable("orders", {
+  id: serial("id").primaryKey(),
+  orderNumber: varchar("orderNumber", { length: 50 }).notNull().unique(),
+  customerName: varchar("customerName", { length: 255 }).notNull(),
+  customerEmail: varchar("customerEmail", { length: 320 }).notNull(),
+  customerPhone: varchar("customerPhone", { length: 50 }),
+  shippingAddress: text("shippingAddress"),
+  subtotal: varchar("subtotal", { length: 20 }).notNull(),
+  tax: varchar("tax", { length: 20 }).default("0").notNull(),
+  shipping: varchar("shipping", { length: 20 }).default("0").notNull(),
+  total: varchar("total", { length: 20 }).notNull(),
+  paymentMethod: mysqlEnum("paymentMethod", ["stripe", "paypal", "bank_transfer", "cash_on_pickup"]).notNull(),
+  paymentStatus: mysqlEnum("paymentStatus", ["pending", "paid", "failed", "refunded", "disputed"]).default("pending").notNull(),
+  stripeSessionId: varchar("stripeSessionId", { length: 100 }),
+  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 100 }),
+  paypalOrderId: varchar("paypalOrderId", { length: 100 }),
+  fulfillmentStatus: mysqlEnum("fulfillmentStatus", ["pending", "picked", "packed", "shipped", "delivered", "ready_for_pickup", "picked_up"]).default("pending").notNull(),
+  deliveryType: mysqlEnum("deliveryType", ["pickup", "delivery", "shipping"]).default("pickup").notNull(),
+  trackingNumber: varchar("trackingNumber", { length: 100 }),
+  notes: text("notes"),
+  fraudScore: int("fraudScore", { unsigned: true }).default(0),
+  fraudFlags: text("fraudFlags"),
+  // Anti-fraud data
+  ipAddress: varchar("ipAddress", { length: 50 }),
+  billingAddress: text("billingAddress"),
+  cardCountry: varchar("cardCountry", { length: 10 }),
+  threeDSecure: mysqlEnum("threeDSecure", ["not_attempted", "attempted", "successful", "failed"]).default("not_attempted"),
+  // Admin
+  adminNotes: text("adminNotes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type Order = typeof orders.$inferSelect;
+export type InsertOrder = typeof orders.$inferInsert;
+
+// ===== ORDER ITEMS =====
+export const orderItems = mysqlTable("order_items", {
+  id: serial("id").primaryKey(),
+  orderId: int("orderId", { unsigned: true }).notNull(),
+  partId: int("partId", { unsigned: true }).notNull(),
+  partName: varchar("partName", { length: 255 }).notNull(),
+  partSku: varchar("partSku", { length: 100 }).notNull(),
+  partImage: varchar("partImage", { length: 500 }),
+  quantity: int("quantity", { unsigned: true }).notNull(),
+  unitPrice: varchar("unitPrice", { length: 20 }).notNull(),
+  totalPrice: varchar("totalPrice", { length: 20 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OrderItem = typeof orderItems.$inferSelect;
+
 // Note: FK columns referencing a serial() PK must use:
 //   bigint("columnName", { mode: "number", unsigned: true }).notNull()
-
