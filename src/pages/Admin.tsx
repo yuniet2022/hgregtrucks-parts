@@ -26,7 +26,9 @@ import {
   RefreshCw,
   Link2,
   ExternalLink,
+  ShoppingCart,
 } from 'lucide-react';
+import OrdersPanel from '../components/OrdersPanel';
 import { trpc } from '@/providers/trpc';
 
 export default function Admin() {
@@ -71,7 +73,7 @@ export default function Admin() {
 }
 
 function Dashboard({ onLogout, userName, isAdmin }: { onLogout: () => void; userName: string; isAdmin: boolean }) {
-  const [activeTab, setActiveTab] = useState<'inventory' | 'users' | 'messages' | 'fullbay'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'users' | 'messages' | 'fullbay' | 'orders'>('inventory');
   const {
     parts,
     filtered,
@@ -178,6 +180,16 @@ function Dashboard({ onLogout, userName, isAdmin }: { onLogout: () => void; user
           >
             <span className="flex items-center gap-2"><Link2 size={16} /> Fullbay</span>
           </button>
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`px-5 py-3 text-sm font-medium tracking-[0.04em] uppercase transition-colors border-b-2 ${
+              activeTab === 'orders'
+                ? 'text-amber border-amber'
+                : 'text-steel border-transparent hover:text-chrome'
+            }`}
+          >
+            <span className="flex items-center gap-2"><ShoppingCart size={16} /> Orders</span>
+          </button>
         </div>
 
         {activeTab === 'users' && isAdmin ? (
@@ -186,6 +198,8 @@ function Dashboard({ onLogout, userName, isAdmin }: { onLogout: () => void; user
           <MessageManagement />
         ) : activeTab === 'fullbay' ? (
           <FullbaySyncPanel />
+        ) : activeTab === 'orders' ? (
+          <OrdersPanel />
         ) : (
           <>
         {/* Toolbar */}
